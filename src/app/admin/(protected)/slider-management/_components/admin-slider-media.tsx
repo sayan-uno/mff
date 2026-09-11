@@ -1,7 +1,8 @@
 
 'use client';
 
-import Image from 'next/image';
+import SmartImage from '@/components/smart-image';
+import { isVideoUrl } from '@/lib/media-urls';
 
 interface AdminSliderMediaProps {
   src: string;
@@ -9,9 +10,7 @@ interface AdminSliderMediaProps {
 }
 
 export default function AdminSliderMedia({ src, alt }: AdminSliderMediaProps) {
-  const isVideo = src.endsWith('.mp4') || src.endsWith('.webm');
-
-  if (isVideo) {
+  if (isVideoUrl(src)) {
     return (
       <video
         src={src}
@@ -25,7 +24,7 @@ export default function AdminSliderMedia({ src, alt }: AdminSliderMediaProps) {
   }
 
   return (
-    <Image
+    <SmartImage
       src={src}
       alt={alt}
       fill

@@ -3,7 +3,8 @@
 
 import { Dialog, DialogContent, DialogClose, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Event } from '@/lib/definitions';
-import Image from 'next/image';
+import SmartImage from '@/components/smart-image';
+import { isVideoUrl } from '@/lib/media-urls';
 import { X } from 'lucide-react';
 
 interface EventModalProps {
@@ -12,7 +13,7 @@ interface EventModalProps {
 }
 
 const EventMedia = ({ src }: { src: string }) => {
-    const isVideo = src.endsWith('.mp4') || src.endsWith('.webm');
+    const isVideo = isVideoUrl(src);
     if (isVideo) {
         return (
             <video
@@ -24,7 +25,7 @@ const EventMedia = ({ src }: { src: string }) => {
             />
         );
     }
-    return <Image src={src} alt="Event" layout="fill" className="object-contain rounded-lg" />;
+    return <SmartImage src={src} alt="Event" fill className="object-contain rounded-lg" />;
 }
 
 export default function EventModal({ event, onClose }: EventModalProps) {

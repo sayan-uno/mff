@@ -6,13 +6,14 @@ import { CustomAd } from '@/lib/definitions';
 import { connectToDatabase } from '@/lib/mongodb';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { isSafeHttpUrl, MEDIA_URL_ERROR } from '@/lib/media-urls';
 import { unstable_noStore as noStore } from 'next/cache';
 import { ObjectId } from 'mongodb';
 import { getLockedAd, setAdLock } from '@/lib/ad-locker';
 
 const adSchema = z.object({
     adId: z.string().optional(),
-    videoUrl: z.string().url('Must be a valid URL.'),
+    videoUrl: z.string().trim().refine(isSafeHttpUrl, MEDIA_URL_ERROR),
     ctaText: z.string().min(1, 'Button text is required.'),
     ctaLink: z.string().url('Must be a valid URL.'),
     ctaShape: z.enum(['pill', 'rounded', 'square']),

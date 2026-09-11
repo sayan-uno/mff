@@ -1,6 +1,7 @@
 'use client';
 
-import Image from 'next/image';
+import SmartImage from '@/components/smart-image';
+import { isVideoUrl } from '@/lib/media-urls';
 
 interface ProductMediaProps {
   src: string;
@@ -9,9 +10,7 @@ interface ProductMediaProps {
 }
 
 export default function ProductMedia({ src, alt, dataAiHint }: ProductMediaProps) {
-  const isVideo = src.endsWith('.mp4') || src.endsWith('.webm');
-
-  if (isVideo) {
+  if (isVideoUrl(src)) {
     return (
       <video
         src={src}
@@ -25,7 +24,7 @@ export default function ProductMedia({ src, alt, dataAiHint }: ProductMediaProps
   }
 
   return (
-    <Image
+    <SmartImage
       src={src}
       alt={alt}
       fill

@@ -3,7 +3,8 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import type { Notification } from '@/lib/definitions';
-import Image from 'next/image';
+import SmartImage from '@/components/smart-image';
+import { isVideoUrl } from '@/lib/media-urls';
 
 interface PopupNotificationProps {
   notification: Notification;
@@ -11,7 +12,7 @@ interface PopupNotificationProps {
 }
 
 const NotificationMedia = ({ src }: { src: string }) => {
-    const isVideo = src.endsWith('.mp4') || src.endsWith('.webm');
+    const isVideo = isVideoUrl(src);
     if (isVideo) {
         return (
             <video
@@ -24,7 +25,7 @@ const NotificationMedia = ({ src }: { src: string }) => {
             />
         );
     }
-    return <Image src={src} alt="Notification Image" layout="fill" className="object-cover" />;
+    return <SmartImage src={src} alt="Notification Image" fill className="object-cover" />;
 }
 
 const ClickableMessage = ({ message }: { message: string }) => {

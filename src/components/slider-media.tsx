@@ -1,7 +1,8 @@
 
 'use client';
 
-import Image from 'next/image';
+import SmartImage from '@/components/smart-image';
+import { isVideoUrl } from '@/lib/media-urls';
 
 interface SliderMediaProps {
   src: string;
@@ -10,9 +11,7 @@ interface SliderMediaProps {
 }
 
 export default function SliderMedia({ src, alt, priority = false }: SliderMediaProps) {
-  const isVideo = src.endsWith('.mp4') || src.endsWith('.webm');
-
-  if (isVideo) {
+  if (isVideoUrl(src)) {
     return (
       <video
         src={src}
@@ -28,7 +27,7 @@ export default function SliderMedia({ src, alt, priority = false }: SliderMediaP
   }
 
   return (
-    <Image
+    <SmartImage
       src={src}
       alt={alt}
       fill

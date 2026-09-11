@@ -11,14 +11,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import Image from 'next/image';
+import SmartImage from '@/components/smart-image';
+import { isVideoUrl } from '@/lib/media-urls';
 
 interface EventManagerProps {
   initialEvents: Event[];
 }
 
 const EventMedia = ({ src }: { src: string }) => {
-    const isVideo = src.endsWith('.mp4') || src.endsWith('.webm');
+    const isVideo = isVideoUrl(src);
     if (isVideo) {
         return (
             <video
@@ -31,7 +32,7 @@ const EventMedia = ({ src }: { src: string }) => {
             />
         );
     }
-    return <Image src={src} alt="Event Image" layout="fill" className="object-cover" />;
+    return <SmartImage src={src} alt="Event Image" fill className="object-cover" />;
 }
 
 export default function EventManager({ initialEvents }: EventManagerProps) {

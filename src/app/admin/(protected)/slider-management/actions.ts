@@ -6,6 +6,7 @@ import { SliderImage } from '@/lib/definitions';
 import { connectToDatabase } from '@/lib/mongodb';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { isSafeHttpUrl, MEDIA_URL_ERROR } from '@/lib/media-urls';
 import { unstable_noStore as noStore } from 'next/cache';
 import { ObjectId } from 'mongodb';
 
@@ -24,7 +25,7 @@ export async function getSliderImages(): Promise<SliderImage[]> {
 
 
 const imageSchema = z.object({
-    imageUrl: z.string().url({ message: "Please enter a valid URL." }),
+    imageUrl: z.string().trim().refine(isSafeHttpUrl, MEDIA_URL_ERROR),
     displayOrder: z.coerce.number().int().min(1, { message: "Display order must be 1 or greater." }),
 });
 

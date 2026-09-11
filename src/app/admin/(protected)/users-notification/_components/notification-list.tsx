@@ -14,7 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import Image from 'next/image';
+import SmartImage from '@/components/smart-image';
+import { isVideoUrl } from '@/lib/media-urls';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -40,9 +41,9 @@ const FormattedDate = ({ dateString }: { dateString: string }) => {
 }
 
 const NotificationMedia = ({ src, alt }: { src: string; alt: string }) => {
-  const isVideo = src.endsWith('.mp4') || src.endsWith('.webm');
+  const isVideo = isVideoUrl(src);
   if (isVideo) return <video src={src} autoPlay loop muted playsInline className="w-full h-full object-cover" />;
-  return <Image src={src} alt={alt} fill className="object-cover" />;
+  return <SmartImage src={src} alt={alt} fill className="object-cover" />;
 };
 
 const ClickableMessage = ({ message }: { message: string }) => {

@@ -12,6 +12,7 @@
  */
 
 import { z } from 'zod';
+import { isSafeHttpUrl, MEDIA_URL_ERROR } from '@/lib/media-urls';
 import { connectToDatabase } from '@/lib/mongodb';
 import { isAdminAuthenticated } from '@/app/actions';
 import { type User, type Notification } from '@/lib/definitions';
@@ -21,7 +22,7 @@ import { revalidatePath } from 'next/cache';
 const multiNotificationSchema = z.object({
     gamingIds: z.string().min(1, 'At least one Gaming ID is required.'),
     message: z.string().min(1, 'Message is required.'),
-    imageUrl: z.string().url().optional().or(z.literal('')),
+    imageUrl: z.string().trim().refine(isSafeHttpUrl, MEDIA_URL_ERROR).optional().or(z.literal('')),
     isPopup: z.enum(['on', 'off']).optional(),
 });
 

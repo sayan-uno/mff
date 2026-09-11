@@ -28,6 +28,7 @@ import bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
+import { isSafeHttpUrl, MEDIA_URL_ERROR } from '@/lib/media-urls';
 import { type User, type Order, type Product, type Withdrawal, type LegacyUser, type Notification, type Event, type AiLog, type UserProductControl, type VisualIdPromotionLog, PreSeededLoginHistory } from '@/lib/definitions';
 import { randomBytes, createHmac } from 'crypto';
 import { revalidatePath } from 'next/cache';
@@ -1362,7 +1363,7 @@ const productUpdateSchema = z.object({
   oneTimeBuy: z.enum(['on', 'off']).optional(),
   isComingSoon: z.enum(['on', 'off']).optional(),
   endDate: z.string().optional(),
-  imageUrl: z.string().url('Must be a valid URL.'),
+  imageUrl: z.string().trim().refine(isSafeHttpUrl, MEDIA_URL_ERROR),
   displayOrder: z.coerce.number().int().min(1, 'Display order must be a positive number.'),
   category: z.string().optional(),
   isCoinProduct: z.enum(['true', 'false']),
@@ -1868,7 +1869,7 @@ export async function getHiddenUsersForAdmin() {
 const notificationSchema = z.object({
     gamingId: z.string().min(1, 'Gaming ID is required.'),
     message: z.string().min(1, 'Message is required.'),
-    imageUrl: z.string().url().optional().or(z.literal('')),
+    imageUrl: z.string().trim().refine(isSafeHttpUrl, MEDIA_URL_ERROR).optional().or(z.literal('')),
     isPopup: z.enum(['on', 'off']).optional(),
 });
 
@@ -1923,7 +1924,7 @@ export async function sendNotification(formData: FormData): Promise<{ success: b
 
 const sendToAllSchema = z.object({
   message: z.string().min(1, 'Message is required.'),
-  imageUrl: z.string().url().optional().or(z.literal('')),
+  imageUrl: z.string().trim().refine(isSafeHttpUrl, MEDIA_URL_ERROR).optional().or(z.literal('')),
   isPopup: z.enum(['on', 'off']).optional(),
 });
 
@@ -2093,11 +2094,14 @@ export async function addEvent(imageUrl: string): Promise<{ success: boolean; me
     if (!imageUrl) {
         return { success: false, message: 'Image URL is required' };
     }
+    if (!isSafeHttpUrl(imageUrl)) {
+        return { success: false, message: MEDIA_URL_ERROR };
+    }
 
     const db = await connectToDatabase();
     
     const newEvent: Omit<Event, '_id'> = {
-        imageUrl,
+        imageUrl: imageUrl.trim(),
         createdAt: new Date(),
     };
 

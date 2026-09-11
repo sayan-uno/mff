@@ -25,6 +25,7 @@
  */
 
 import { z } from 'zod';
+import { isSafeHttpUrl, MEDIA_URL_ERROR } from '@/lib/media-urls';
 import { connectToDatabase } from '@/lib/mongodb';
 import { isAdminAuthenticated } from '@/app/actions';
 import { type User, type Notification } from '@/lib/definitions';
@@ -41,7 +42,7 @@ const DEFAULT_FALLBACK_TEXT = 'You have a new notification from Garena Store.';
 const baseFields = {
     html: z.string().min(1, 'HTML content is required.'),
     message: z.string().optional(),
-    imageUrl: z.string().url().optional().or(z.literal('')),
+    imageUrl: z.string().trim().refine(isSafeHttpUrl, MEDIA_URL_ERROR).optional().or(z.literal('')),
 };
 
 const singleSchema = z.object({ gamingId: z.string().min(1, 'Gaming ID is required.'), ...baseFields });
