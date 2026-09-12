@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { logoutAdmin } from '@/app/actions';
-import { Home, ListChecks, ListX, Users, LogOut, Banknote, Tag, ArchiveRestore, Coins, ShieldBan, Box, EyeOff, Bell, CalendarPlus, MessageCircle, SlidersHorizontal, FileCode, PersonStanding, BadgeCheck, History, Clapperboard, BellRing, GalleryHorizontal, Timer, MessageSquareText, ShieldX, Fingerprint, Ban, Download, Activity, CreditCard, Headset, ReceiptText, TrendingUp, ShieldAlert } from 'lucide-react';
+import { Home, ListChecks, ListX, Users, LogOut, Banknote, Tag, ArchiveRestore, Coins, ShieldBan, Box, EyeOff, Bell, CalendarPlus, MessageCircle, SlidersHorizontal, FileCode, PersonStanding, BadgeCheck, History, Clapperboard, BellRing, GalleryHorizontal, Timer, MessageSquareText, ShieldX, Fingerprint, Ban, Download, Activity, CreditCard, Headset, ReceiptText, TrendingUp, ShieldAlert, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
@@ -44,6 +44,7 @@ const navItems = [
   { href: '/admin/events', label: 'Manage Events', icon: CalendarPlus },
   { href: '/admin/custom-ads', label: 'Custom Ad Management', icon: Clapperboard },
   { href: '/admin/slider-management', label: 'Slider Management', icon: GalleryHorizontal },
+  { href: '/admin/object-manager', label: 'Object Manager', icon: FolderOpen },
   { href: '/admin/downloads', label: 'Download Section', icon: Download },
 ];
 
