@@ -58,6 +58,7 @@ import {
 import AcceptRefundDialog from './accept-refund-dialog';
 import AdminCreateReportDialog from './admin-create-report';
 import SupportUserIdentityHeader from './support-user-identity-header';
+import SupportUserOrdersSummary, { useSupportUserOrders } from './support-user-orders-summary';
 import {
   getAllTicketsForAdmin,
   getTicketForAdmin,
@@ -298,6 +299,13 @@ export default function AdminSupportClient({ initialTickets }: Props) {
   const [stagedImages, setStagedImages] = useState<StagedPhoto[]>([]);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [activeBlocked, setActiveBlocked] = useState(false);
+  // Orders at a glance for the open report's UID: total count (store coin
+  // orders included) and the newest two orders. Fetched once per opened
+  // report and shown in the green header (desktop) or just under it (phone).
+  const { loading: ordersLoading, summary: orderSummary } = useSupportUserOrders(
+    activeTicket ? activeTicket._id.toString() : null,
+    activeTicket ? activeTicket.gamingId : null,
+  );
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showRefundDialog, setShowRefundDialog] = useState(false);
@@ -1207,6 +1215,13 @@ export default function AdminSupportClient({ initialTickets }: Props) {
                       {activeTicket.visualGamingId || activeTicket.gamingId} · {activeTicket.status}
                     </div>
                   </div>
+                  {/* Orders at a glance (desktop): fills the middle of the header
+                      with the UID's order count + newest two orders. */}
+                  <SupportUserOrdersSummary
+                    loading={ordersLoading}
+                    summary={orderSummary}
+                    className="hidden md:flex flex-1 min-w-0 max-w-[460px]"
+                  />
                   <Button
                     size="sm"
                     variant="secondary"
@@ -1280,6 +1295,15 @@ export default function AdminSupportClient({ initialTickets }: Props) {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
+
+                {/* Orders at a glance (phone): the header has no spare room on
+                    small screens, so the same block sits in a slim green row
+                    directly under it. Same data as the desktop block. */}
+                {(ordersLoading || orderSummary) && (
+                  <div className="md:hidden bg-[#075E54] text-white px-3 pb-2 -mt-px">
+                    <SupportUserOrdersSummary loading={ordersLoading} summary={orderSummary} className="flex min-w-0" />
+                  </div>
+                )}
 
                 {/* Live user-identity strip: who the report's UID really is
                     (Visual / Promoted old / Promoted new / not found). Keyed by
