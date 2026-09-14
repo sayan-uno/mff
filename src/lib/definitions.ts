@@ -156,6 +156,7 @@ export interface Event {
 export interface AiLog {
     _id: ObjectId;
     gamingId: string;
+    ip?: string; // Requester IP (mainly to identify guests)
     question: string;
     answer: string;
     createdAt: Date;

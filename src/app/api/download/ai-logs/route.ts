@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
           const plainDoc = {
               _id: doc._id.toString(),
               gamingId: doc.gamingId,
+              ip: doc.ip ?? '',
               question: doc.question,
               answer: doc.answer,
               createdAt: doc.createdAt,

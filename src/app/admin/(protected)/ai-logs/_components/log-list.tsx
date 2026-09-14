@@ -305,7 +305,14 @@ export default function LogList({ initialLogs, initialHasMore, totalLogs }: LogL
                                                     onCheckedChange={(checked) => toggleSelectOne(log._id.toString(), Boolean(checked))}
                                                     aria-label="Select log"
                                                 />
-                                                <CardTitle className="text-sm font-mono">{log.gamingId}</CardTitle>
+                                                <CardTitle className="text-sm font-mono flex flex-wrap items-center gap-2">
+                                                    {log.gamingId}
+                                                    {log.ip && (
+                                                        <a href={`/admin/ip-logger?ip=${encodeURIComponent(log.ip)}`} className="text-xs font-normal text-muted-foreground hover:underline" title="Search this IP in User Security Logs">
+                                                            IP {log.ip}
+                                                        </a>
+                                                    )}
+                                                </CardTitle>
                                             </div>
                                             <CardDescription className="text-xs">
                                                 <FormattedDate dateString={log.createdAt as unknown as string} />
