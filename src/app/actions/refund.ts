@@ -126,6 +126,15 @@ export interface AdminFailedOrder {
     orderStatus: Order['status'];    // The order's own status (Failed / Completed / Processing)
     alreadyRefunding: boolean;       // A refund is already in progress for this order
     refundStatus?: RefundStatus;
+    refundAcceptedAt?: string;       // ISO: when the existing refund was (re)accepted
+    refundCompleteBy?: string;       // ISO: when that refund is due to complete
+}
+
+// Serializes a stored date for the client; undefined when missing or invalid.
+function toIso(value: Date | string | undefined): string | undefined {
+    if (!value) return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 // The order statuses an admin is allowed to accept a refund for.
@@ -197,6 +206,8 @@ export async function getUserFailedOrders(gamingId: string): Promise<AdminFailed
                 orderStatus: o.status,
                 alreadyRefunding: existing?.status === 'in_progress',
                 refundStatus: existing?.status,
+                refundAcceptedAt: toIso(existing?.acceptedAt),
+                refundCompleteBy: toIso(existing?.completeBy),
             };
         });
     } catch (error) {

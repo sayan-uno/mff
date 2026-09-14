@@ -20,6 +20,68 @@ import {
   type AdminFailedOrder,
 } from '@/app/actions/refund';
 
+// --- "Refund accepted N days ago" helpers -----------------------------------
+// Days are counted as calendar days in India time so the wording always agrees
+// with the accepted date shown next to it (accepted yesterday at 11 pm reads
+// "1 day ago", not "0 days ago").
+const IST = 'Asia/Kolkata';
+
+function istDayNumber(date: Date): number {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: IST, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  const [y, m, d] = parts.split('-').map(Number);
+  return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
+}
+
+function daysAgoText(iso: string): string {
+  const accepted = new Date(iso);
+  if (Number.isNaN(accepted.getTime())) return '';
+  const days = istDayNumber(new Date()) - istDayNumber(accepted);
+  if (days <= 0) return 'today';
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}
+
+function formatIstDate(iso: string, withTime = true): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('en-IN', {
+    timeZone: IST,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    ...(withTime ? { hour: 'numeric', minute: '2-digit', hour12: true } : {}),
+  });
+}
+
+// The note shown under an order whose refund is already running: how long ago
+// it was accepted and on which date. The "re-accepting restarts the 14-day
+// window" reminder lives in the hover text so the line stays short.
+function RefundAcceptedNote({ acceptedAt, completeBy }: { acceptedAt?: string; completeBy?: string }) {
+  const ago = acceptedAt ? daysAgoText(acceptedAt) : '';
+  const date = acceptedAt ? formatIstDate(acceptedAt) : '';
+  const hint = [
+    date ? `Refund accepted on ${date}.` : 'Refund already in progress.',
+    completeBy ? `Due to complete by ${formatIstDate(completeBy, false)}.` : '',
+    'Re-accepting this order restarts the 14-day window.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <p className="text-[11px] text-amber-600 font-medium flex items-center gap-1 mt-0.5" title={hint}>
+      <RotateCcw className="h-3 w-3 shrink-0" />
+      <span className="truncate">
+        {ago && date ? (
+          <>
+            Refund accepted {ago} · {date}
+          </>
+        ) : (
+          'Refund already in progress'
+        )}
+      </span>
+    </p>
+  );
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -141,10 +203,7 @@ export default function AcceptRefundDialog({
                         {o.utr ? ` · UTR ${o.utr}` : ''}
                       </p>
                       {o.alreadyRefunding && (
-                        <p className="text-[11px] text-amber-600 font-medium flex items-center gap-1 mt-0.5">
-                          <RotateCcw className="h-3 w-3" />
-                          Already refunding — re-accepting resets the 14-day timer
-                        </p>
+                        <RefundAcceptedNote acceptedAt={o.refundAcceptedAt} completeBy={o.refundCompleteBy} />
                       )}
                     </div>
                   </label>
