@@ -27,7 +27,7 @@ const FormattedDate = ({ dateString }: { dateString: string }) => {
     useEffect(() => setMounted(true), []);
     if (!mounted) return null;
     const date = new Date(dateString);
-    return date.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+    return date.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
 }
 
 function calculateDuration(start: string, end: string): string {
@@ -405,8 +405,9 @@ export default function PaymentSessionList({ initialSessions, initialHasMore, to
                                 </div>
                                 <div className="text-sm text-muted-foreground flex justify-between items-center border-t pt-2">
                                     <p>Amount: <span className="font-bold font-sans text-foreground">₹{session.amount.toFixed(2)}</span></p>
-                                    <p>Duration: <span className="font-semibold text-foreground">{calculateDuration(session.createdAt, session.expiresAt)}</span></p>
-                                    <p>Created: <FormattedDate dateString={session.createdAt} /></p>
+                                    <p>Duration: <span className="font-semibold text-foreground">{calculateDuration(String(session.createdAt), String(session.expiresAt))}</span></p>
+                                    <p>Created: <FormattedDate dateString={String(session.createdAt)} /></p>
+                                    <p>Expires: <FormattedDate dateString={String(session.expiresAt)} /></p>
                                 </div>
                             </div>
                         ))}
