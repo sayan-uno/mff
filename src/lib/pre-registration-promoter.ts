@@ -1,6 +1,3 @@
-
-'use server';
-
 import { connectToDatabase } from '@/lib/mongodb';
 import { type User } from '@/lib/definitions';
 import { promoteVisualId } from '@/lib/visual-id-promoter';

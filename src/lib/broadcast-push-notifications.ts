@@ -1,6 +1,3 @@
-
-'use server';
-
 import admin from 'firebase-admin';
 import { connectToDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';

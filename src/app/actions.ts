@@ -26,29 +26,59 @@ import { customerFAQChatbot, type CustomerFAQChatbotInput } from '@/ai/flows/cus
 import { connectToDatabase } from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { z } from 'zod';
 import { isSafeHttpUrl, MEDIA_URL_ERROR } from '@/lib/media-urls';
-import { type User, type Order, type Product, type Withdrawal, type LegacyUser, type Notification, type Event, type AiLog, type UserProductControl, type VisualIdPromotionLog, PreSeededLoginHistory } from '@/lib/definitions';
+import { type User, type Order, type Product, type Withdrawal, type LegacyUser, type Notification, type Event, type AiLog, type UserProductControl, type VisualIdPromotionLog, type CustomAd, PreSeededLoginHistory } from '@/lib/definitions';
 import { randomBytes, createHmac } from 'crypto';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { unstable_noStore as noStore } from 'next/cache';
-import { sendRedeemCodeNotification } from '@/lib/email';
+import { alertRedeemCodeOrder } from '@/lib/admin-alerts';
 import { ObjectId } from 'mongodb';
 import { sendPushNotification, sendMulticastPushNotification } from '@/lib/push-notifications';
 import { promoteVisualId } from '@/lib/visual-id-promoter';
 import { setSmartVisualId } from '@/lib/auto-visual-id';
 import { handlePreRegistrationPromotion } from '@/lib/pre-registration-promoter';
 import { buildPurchaseSuccessHtml } from '@/lib/purchase-success-notifier';
+import { ADMIN_CHALLENGE_COOKIE, ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from '@/lib/admin-auth/session';
+import { getSessionVersion } from '@/lib/admin-auth/store';
+import { rateLimit } from '@/lib/rate-limit';
+import { AD_REWARD_COINS, claimAdReward, startAdRewardSession } from '@/lib/ad-rewards';
+import { GIFT_RULES, clearGiftFailures, getGiftLock, recordGiftPasswordFailure } from '@/lib/coin-guard';
 
 
-const key = new TextEncoder().encode(process.env.SESSION_SECRET || 'your-fallback-secret-for-session');
+/**
+ * Key for the account (username/password) session cookie. There is deliberately
+ * no fallback: a deployment without a strong SESSION_SECRET must fail loudly
+ * instead of silently signing sessions with a value anyone can read in the repo.
+ */
+function sessionKey(): Uint8Array {
+  const secret = (process.env.SESSION_SECRET ?? '').trim();
+  if (secret.length < 32) {
+    throw new Error('SESSION_SECRET must be set to at least 32 characters.');
+  }
+  return new TextEncoder().encode(secret);
+}
+
+const USER_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+};
 
 
 export async function askQuestion(
   input: Omit<CustomerFAQChatbotInput, 'gamingId' | 'visualGamingId'>
 ): Promise<{ success: boolean; answer?: string; error?: string }> {
+  // Gentle limits: no human hits these; they protect the AI bill from scripts.
+  const askerId = (await cookies()).get('gaming_id')?.value ?? 'guest';
+  const askerHeaders = await headers();
+  const askerIp = (askerHeaders.get('x-forwarded-for') ?? '').split(',')[0].trim() || askerHeaders.get('x-real-ip') || 'unknown';
+  if (!rateLimit(`chat:user:${askerId}`, { limit: 20, windowMs: 60 * 1000 }).allowed || !rateLimit(`chat:ip:${askerIp}`, { limit: 40, windowMs: 60 * 1000 }).allowed) {
+    return { success: false, error: 'Too many questions in a short time. Please wait a minute and try again.' };
+  }
   try {
     const user = await getUserData();
     const gamingId = user?.gamingId || 'Guest';
@@ -99,9 +129,9 @@ async function createSession(username: string) {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(expires)
-    .sign(key);
+    .sign(sessionKey());
 
-  cookies().set('session', session, { expires, httpOnly: true });
+  cookies().set('session', session, { ...USER_COOKIE_OPTIONS, expires });
 }
 
 export async function getSession() {
@@ -109,7 +139,7 @@ export async function getSession() {
   if (!sessionCookie) return null;
 
   try {
-    const { payload } = await jwtVerify(sessionCookie, key, {
+    const { payload } = await jwtVerify(sessionCookie, sessionKey(), {
       algorithms: ['HS256'],
     });
     return payload as { username: string; iat: number; exp: number };
@@ -119,7 +149,7 @@ export async function getSession() {
 }
 
 export async function logout() {
-  cookies().set('session', '', { expires: new Date(0) });
+  cookies().set('session', '', { ...USER_COOKIE_OPTIONS, expires: new Date(0) });
   redirect('/account');
 }
 
@@ -331,7 +361,7 @@ export async function logoutUser(): Promise<{ success: boolean, message: string 
     const user = await getUserData();
 
     if (!user) {
-        cookies().set('gaming_id', '', { expires: new Date(0) });
+        cookies().set('gaming_id', '', { ...USER_COOKIE_OPTIONS, expires: new Date(0) });
         return { success: true, message: 'Logged out.' };
     }
 
@@ -359,7 +389,7 @@ export async function logoutUser(): Promise<{ success: boolean, message: string 
         cookies().set('logout_history', JSON.stringify(history), { maxAge: 365 * 24 * 60 * 60, httpOnly: true });
     }
 
-    cookies().set('gaming_id', '', { expires: new Date(0) });
+    cookies().set('gaming_id', '', { ...USER_COOKIE_OPTIONS, expires: new Date(0) });
     return { success: true, message: 'Logged out successfully.' };
 }
 
@@ -382,7 +412,7 @@ export async function registerGamingId(gamingId: string): Promise<{ success: boo
     const bannedUser = await db.collection<User>('users').findOne({ gamingId, isBanned: true });
     if (bannedUser) {
         // Log the user in by setting the cookie, but return the banned status
-        cookies().set('gaming_id', gamingId, { maxAge: 365 * 24 * 60 * 60, httpOnly: true });
+        cookies().set('gaming_id', gamingId, { ...USER_COOKIE_OPTIONS, maxAge: 365 * 24 * 60 * 60 });
         return { 
             success: true, 
             message: 'This Gaming ID has been banned.', 
@@ -405,7 +435,7 @@ export async function registerGamingId(gamingId: string): Promise<{ success: boo
     let user = await db.collection<User>('users').findOne({ gamingId });
 
     if (user) {
-      cookies().set('gaming_id', gamingId, { maxAge: 365 * 24 * 60 * 60, httpOnly: true });
+      cookies().set('gaming_id', gamingId, { ...USER_COOKIE_OPTIONS, maxAge: 365 * 24 * 60 * 60 });
       if (logoutHistory && logoutHistory.previousGamingId !== gamingId) {
         const userToUpdate = await db.collection<User>('users').findOne({ gamingId });
         if(userToUpdate) {
@@ -449,7 +479,7 @@ export async function registerGamingId(gamingId: string): Promise<{ success: boo
     };
     
     const result = await db.collection<User>('users').insertOne(newUser as User);
-    cookies().set('gaming_id', gamingId, { maxAge: 365 * 24 * 60 * 60, httpOnly: true });
+    cookies().set('gaming_id', gamingId, { ...USER_COOKIE_OPTIONS, maxAge: 365 * 24 * 60 * 60 });
     const createdUser = { ...newUser, _id: result.insertedId };
     if (referralCode) {
         cookies().delete('referral_code');
@@ -523,23 +553,60 @@ export async function getUserData(): Promise<User | null> {
     }
 }
 
-export async function rewardAdCoins(): Promise<{ success: boolean; message: string }> {
-    const gamingId = cookies().get('gaming_id')?.value;
+/**
+ * Ad rewards are token based (see src/lib/ad-rewards.ts): the watch-ad page
+ * asks for a session when the ad starts and can only claim once the server
+ * says the reward time has passed.
+ */
+export async function startAdSession(adId: string): Promise<{ success: true; token: string; rewardInSec: number } | { success: false; message: string }> {
+    noStore();
+    const gamingId = (await cookies()).get('gaming_id')?.value;
+    if (!gamingId) return { success: false, message: 'User not logged in.' };
+    if (!rateLimit(`ad-start:${gamingId}`, { limit: 20, windowMs: 10 * 60 * 1000 }).allowed) {
+        return { success: false, message: 'Too many ad sessions. Please wait a few minutes.' };
+    }
+    if (!ObjectId.isValid(String(adId ?? ''))) return { success: false, message: 'Ad not found.' };
+    try {
+        const db = await connectToDatabase();
+        const ad = await db.collection<CustomAd>('custom_ads').findOne({ _id: new ObjectId(String(adId)) }, { projection: { totalDuration: 1, rewardTime: 1 } });
+        if (!ad) return { success: false, message: 'Ad not found.' };
+        const session = await startAdRewardSession({
+            gamingId,
+            adId: String(adId),
+            rewardTimeSec: Number(ad.rewardTime ?? 0),
+            totalDurationSec: Number(ad.totalDuration ?? 0),
+        });
+        return { success: true, ...session };
+    } catch (error) {
+        console.error('Error starting ad session:', error);
+        return { success: false, message: 'Could not start the ad session.' };
+    }
+}
+
+export async function rewardAdCoins(token: string): Promise<{ success: boolean; message: string; retryAfterMs?: number }> {
+    noStore();
+    const gamingId = (await cookies()).get('gaming_id')?.value;
     if (!gamingId) {
         return { success: false, message: 'User not logged in.' };
     }
     try {
-        const db = await connectToDatabase();
-        const result = await db.collection<User>('users').updateOne(
-            { gamingId },
-            { $inc: { coins: 5 } }
-        );
-
-        if (result.modifiedCount === 0) {
-            return { success: false, message: 'Could not find user to reward.' };
+        const result = await claimAdReward(gamingId, String(token ?? ''));
+        if (result.ok) {
+            revalidatePath('/');
+            return { success: true, message: `You earned ${result.coins} coins!` };
         }
-        revalidatePath('/');
-        return { success: true, message: 'You earned 5 coins!' };
+        switch (result.reason) {
+            case 'not_yet':
+                return { success: false, message: 'The ad has not finished yet.', retryAfterMs: result.retryAfterMs };
+            case 'claimed':
+                return { success: false, message: 'This ad reward was already claimed.' };
+            case 'daily_cap':
+                return { success: false, message: 'Daily ad reward limit reached. Come back tomorrow!' };
+            case 'expired':
+                return { success: false, message: 'This ad session expired.' };
+            default:
+                return { success: false, message: 'Invalid ad session.' };
+        }
     } catch (error) {
         console.error('Error rewarding ad coins:', error);
         return { success: false, message: 'An error occurred.' };
@@ -579,7 +646,7 @@ export async function setGiftPassword(prevState: FormState, formData: FormData):
         
         await db.collection<User>('users').updateOne(
             { gamingId }, 
-            { $set: { giftPassword: hashedPassword, canSetGiftPassword: false } }
+            { $set: { giftPassword: hashedPassword, canSetGiftPassword: false }, $unset: { giftFailedAttempts: '', giftLockUntil: '' } }
         );
 
         revalidatePath('/');
@@ -595,7 +662,7 @@ export async function setGiftPassword(prevState: FormState, formData: FormData):
 
 const transferCoinsSchema = z.object({
   recipientId: z.string().min(1, "Recipient ID is required."),
-  amount: z.coerce.number().positive("Amount must be positive."),
+  amount: z.coerce.number().int("Amount must be a whole number.").min(GIFT_RULES.minAmount, "Amount must be at least 1 coin.").max(GIFT_RULES.maxAmount, "Amount is too large."),
   giftPassword: z.string().min(1, "Gift password is required."),
 });
 
@@ -614,6 +681,17 @@ export async function transferCoins(prevState: FormState, formData: FormData): P
   
   if (senderGamingId === recipientId) {
     return { success: false, message: 'You cannot transfer coins to yourself.' };
+  }
+
+  const requestHeaders = await headers();
+  const senderIp = (requestHeaders.get('x-forwarded-for') ?? '').split(',')[0].trim() || requestHeaders.get('x-real-ip') || 'unknown';
+  if (!rateLimit(`gift:user:${senderGamingId}`, { limit: 10, windowMs: 10 * 60 * 1000 }).allowed || !rateLimit(`gift:ip:${senderIp}`, { limit: 20, windowMs: 10 * 60 * 1000 }).allowed) {
+    return { success: false, message: 'Too many transfer attempts. Please wait a few minutes.' };
+  }
+  const giftLock = await getGiftLock(senderGamingId);
+  if (giftLock.locked) {
+    const minutes = Math.max(1, Math.ceil((giftLock.until.getTime() - Date.now()) / 60000));
+    return { success: false, message: `Gifting is locked after too many wrong gift passwords. Try again in ${minutes} min.` };
   }
 
   const db = await connectToDatabase();
@@ -671,10 +749,20 @@ export async function transferCoins(prevState: FormState, formData: FormData): P
         });
     }
 
+    await clearGiftFailures(senderGamingId);
     revalidatePath('/');
     return { success: true, message: resultMessage };
 
   } catch (error: any) {
+    if (error?.message === 'Incorrect gift password.') {
+      const failure = await recordGiftPasswordFailure(senderGamingId, senderIp);
+      return {
+        success: false,
+        message: failure.lockedNow
+          ? 'Too many wrong gift passwords. Gifting is locked for 30 minutes.'
+          : `Incorrect gift password. ${failure.attemptsLeft} attempt${failure.attemptsLeft === 1 ? '' : 's'} left before a 30-minute lock.`,
+      };
+    }
     return { success: false, message: error.message || 'Coin transfer failed.' };
   } finally {
     await session.endSession();
@@ -779,10 +867,11 @@ export async function createRedeemCodeOrder(
         });
         await session.endSession();
 
-        await sendRedeemCodeNotification({
+        await alertRedeemCodeOrder({
           gamingId: newOrder.gamingId,
           productName: newOrder.productName,
-          redeemCode: newOrder.redeemCode!
+          redeemCode: newOrder.redeemCode!,
+          amount: newOrder.finalPrice,
         });
 
         // Send push notification
@@ -897,13 +986,16 @@ export async function createUpiOrder(
 }
 
 export async function markOrderAsTracked(orderId: string): Promise<{ success: boolean }> {
+  // Only the order's owner (the tracker runs in the buyer's own browser) may set the flag.
+  const gamingId = (await cookies()).get('gaming_id')?.value;
+  if (!gamingId || !ObjectId.isValid(String(orderId ?? ''))) return { success: false };
   try {
     const db = await connectToDatabase();
-    await db.collection<Order>('orders').updateOne(
-      { _id: new ObjectId(orderId) },
+    const result = await db.collection<Order>('orders').updateOne(
+      { _id: new ObjectId(orderId), gamingId },
       { $set: { isPurchaseTracked: true } }
     );
-    return { success: true };
+    return { success: result.matchedCount === 1 };
   } catch (error) {
     console.error('Failed to mark order as tracked:', error);
     return { success: false };
@@ -917,36 +1009,31 @@ type AdminFormState = {
   success: boolean;
 };
 
-export async function verifyAdminPassword(prevState: FormState, formData: FormData): Promise<FormState> {
-  noStore();
-  const password = formData.get('password') as string;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-
-  if (!adminPassword) {
-    console.error('ADMIN_PASSWORD environment variable not set.');
-    return { message: 'Admin password not configured.', success: false };
-  }
-  
-  const isValid = password === adminPassword;
-
-  if (isValid) {
-    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    cookies().set('admin_session', 'true', { expires, httpOnly: true, sameSite: 'strict', path: '/' });
-    revalidatePath('/admin', 'layout');
-    redirect('/admin');
-  } else {
-    return { message: 'Incorrect password.', success: false };
-  }
-}
-
+/**
+ * Admin session check used by every admin page, server action and API route.
+ * The cookie holds a signed JWT (see src/lib/admin-auth/session.ts); its
+ * `ver` claim must match the current session version so that a password
+ * change or "log out everywhere" invalidates existing sessions.
+ * Login itself lives in src/app/admin/login/actions.ts (password + Telegram code).
+ */
 export async function isAdminAuthenticated(): Promise<boolean> {
   noStore();
-  const session = cookies().get('admin_session')?.value;
-  return session === 'true';
+  const token = (await cookies()).get(ADMIN_SESSION_COOKIE)?.value;
+  if (!token) return false;
+  const payload = await verifyAdminSessionToken(token);
+  if (!payload) return false;
+  try {
+    return payload.ver === (await getSessionVersion());
+  } catch (error) {
+    console.error('Admin session version check failed:', error);
+    return false;
+  }
 }
 
 export async function logoutAdmin() {
-    cookies().set('admin_session', '', { expires: new Date(0) });
+    const jar = await cookies();
+    jar.delete(ADMIN_SESSION_COOKIE);
+    jar.delete(ADMIN_CHALLENGE_COOKIE);
     redirect('/admin/login');
 }
 
@@ -1062,6 +1149,7 @@ export async function getOrdersForAdmin(
   endDate?: string,
 ) {
   noStore();
+  if (!(await isAdminAuthenticated())) throw new Error('Unauthorized');
   const db = await connectToDatabase();
   const skip = (page - 1) * PAGE_SIZE;
 
@@ -1137,6 +1225,7 @@ export async function deleteOrdersInRange(
 
 export async function getLegacyUsersForAdmin(page: number, sort: string, search: string) {
   noStore();
+  if (!(await isAdminAuthenticated())) throw new Error('Unauthorized');
   const db = await connectToDatabase();
   const skip = (page - 1) * PAGE_SIZE;
 
@@ -1255,6 +1344,7 @@ export async function requestWithdrawal(formData: FormData): Promise<FormState> 
 
 export async function getWithdrawalsForAdmin(page: number, sort: string, status: ('Pending' | 'Completed' | 'Failed')[]) {
     noStore();
+    if (!(await isAdminAuthenticated())) throw new Error('Unauthorized');
     const db = await connectToDatabase();
     const skip = (page - 1) * PAGE_SIZE;
 
@@ -1668,6 +1758,7 @@ function buildAdminUsersQuery(search: string, startDate?: string, endDate?: stri
 
 export async function getUsersForAdmin(page: number, sort: string, search: string, since?: string, startDate?: string, endDate?: string) {
     noStore();
+    if (!(await isAdminAuthenticated())) throw new Error('Unauthorized');
     const db = await connectToDatabase();
     const skip = (page - 1) * PAGE_SIZE;
 
@@ -1854,6 +1945,7 @@ export async function unhideUser(userId: string): Promise<{ success: boolean; me
 
 export async function getHiddenUsersForAdmin() {
     noStore();
+    if (!(await isAdminAuthenticated())) throw new Error('Unauthorized');
     const db = await connectToDatabase();
     
     const usersFromDb = await db.collection<User>('users')
@@ -2193,6 +2285,7 @@ function buildAiLogsQuery(search: string, startDate?: string, endDate?: string) 
 
 export async function getAiLogs(page: number, search: string, sort: string, startDate?: string, endDate?: string) {
     noStore();
+    if (!(await isAdminAuthenticated())) throw new Error('Unauthorized');
     const db = await connectToDatabase();
     const skip = (page - 1) * PAGE_SIZE;
 

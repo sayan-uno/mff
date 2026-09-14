@@ -1,6 +1,3 @@
-
-'use server';
-
 import type { CustomAd } from '@/lib/definitions';
 import { cookies } from 'next/headers';
 

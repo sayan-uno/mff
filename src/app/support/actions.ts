@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { rateLimit } from '@/lib/rate-limit';
 import { after } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { unstable_noStore as noStore } from 'next/cache';
@@ -375,6 +376,9 @@ export async function uploadSupportImage(
     }
     if (!ObjectId.isValid(ticketId)) {
         return { success: false, message: 'Invalid report.' };
+    }
+    if (!rateLimit(`support-image:${gamingId}`, { limit: 30, windowMs: 10 * 60 * 1000 }).allowed) {
+        return { success: false, message: 'Too many uploads in a short time. Please wait a few minutes.' };
     }
     if (!dataUri || !dataUri.startsWith('data:image/')) {
         return { success: false, message: 'Only image files are supported.' };

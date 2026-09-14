@@ -3,7 +3,7 @@
 import { isAdminAuthenticated } from '@/app/actions';
 import { connectToDatabase } from '@/lib/mongodb';
 import { getActiveUpiId } from '@/lib/get-active-upi';
-import { sendUpiChangeAlert } from '@/lib/upi-alert-email';
+import { alertUpiChange } from '@/lib/admin-alerts';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { unstable_noStore as noStore } from 'next/cache';
@@ -74,13 +74,15 @@ export async function updateUpiId(newUpiId: string): Promise<{ success: boolean;
       return { success: false, message: 'The new UPI ID is the same as the current one.' };
     }
 
-    // Step 4: SEND ALERT EMAIL FIRST — This is the critical security step.
-    // If this throws (email fails), the database update below NEVER happens.
-    // This guarantees the admin is ALWAYS notified of UPI changes.
-    await sendUpiChangeAlert({
-      oldUpiId: currentUpiId,
-      newUpiId: sanitizedNewUpiId,
-    });
+    // Step 4: TELEGRAM ALERT FIRST — the critical security step. The change is
+    // refused unless Telegram confirms delivery, so the admin is always notified.
+    const alert = await alertUpiChange({ oldUpiId: currentUpiId, newUpiId: sanitizedNewUpiId });
+    if (!alert.ok) {
+      return {
+        success: false,
+        message: `SECURITY: The Telegram alert could not be delivered (${alert.reason}). UPI change has been BLOCKED for your safety.`,
+      };
+    }
 
     // Step 5: Update the database (only reached if email was sent successfully)
     await db.collection<AppSetting>('app_settings').updateOne(
@@ -112,18 +114,10 @@ export async function updateUpiId(newUpiId: string): Promise<{ success: boolean;
 
     return {
       success: true,
-      message: `UPI ID updated successfully. A security alert has been sent to your email.`,
+      message: `UPI ID updated successfully. A security alert has been sent to your Telegram.`,
     };
   } catch (error: any) {
     console.error('[SECURITY] UPI update failed:', error);
-
-    // If the email sending failed, this will be the error message
-    if (error.message?.includes('SECURITY BLOCK') || error.code === 'EAUTH' || error.code === 'ESOCKET') {
-      return {
-        success: false,
-        message: 'SECURITY: Could not send alert email. UPI change has been BLOCKED for your safety. Please check your email configuration.',
-      };
-    }
 
     return {
       success: false,

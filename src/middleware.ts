@@ -1,6 +1,31 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from '@/lib/admin-auth/session';
+
+const ADMIN_LOGIN_PATH = '/admin/login';
+
+function isAdminArea(pathname: string) {
+  return pathname === '/admin' || (pathname.startsWith('/admin/') && !pathname.startsWith(ADMIN_LOGIN_PATH));
+}
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Admin gate: pages and /api/admin/* need a validly signed session cookie.
+  // (Signature + expiry are checked here; pages and actions also check the
+  // session version against the database.)
+  if (isAdminArea(pathname) || pathname.startsWith('/api/admin/')) {
+    const session = await verifyAdminSessionToken(request.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+    if (!session) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+      }
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = ADMIN_LOGIN_PATH;
+      loginUrl.search = '';
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
   const response = NextResponse.next();
 
   // Handle referral codes
@@ -22,5 +47,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)', '/api/admin/:path*'],
 };

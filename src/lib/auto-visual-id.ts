@@ -1,6 +1,3 @@
-
-'use server';
-
 import { connectToDatabase } from '@/lib/mongodb';
 import { type User, type Order, type VisualIdPromotionLog, type Notification } from '@/lib/definitions';
 import { sendPushNotification } from './push-notifications';

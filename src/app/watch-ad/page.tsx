@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { rewardAdCoins, getUserData } from '@/app/actions';
+import { rewardAdCoins, getUserData, startAdSession } from '@/app/actions';
 import { getRandomAd } from '../admin/(protected)/custom-ads/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, X, Volume2, VolumeX, SkipForward } from 'lucide-react';
@@ -26,6 +26,7 @@ export default function WatchAdPage() {
   const [showCta, setShowCta] = useState(false);
   
   const [shouldGrantReward, setShouldGrantReward] = useState(false);
+  const [adToken, setAdToken] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -46,6 +47,10 @@ export default function WatchAdPage() {
 
       if (adData) {
         setAd(adData);
+        // Server-issued single-use token; the reward can only be claimed after the
+        // server-side reward time has passed.
+        const session = await startAdSession(String(adData._id));
+        if (session.success) setAdToken(session.token);
       }
       setIsLoading(false);
     }
@@ -96,18 +101,25 @@ export default function WatchAdPage() {
   }, [ad, isLoading]);
   
   useEffect(() => {
-    if (shouldGrantReward) {
-      rewardAdCoins().then(result => {
-        if (result.success) {
-          toast({
-            title: 'Success!',
-            description: result.message || "You've earned 5 coins!",
-          });
-        }
-      });
-      setIsRewardGranted(true);
-    }
-  }, [shouldGrantReward, toast]);
+    if (!shouldGrantReward) return;
+    setIsRewardGranted(true);
+    if (!adToken) return; // no server session (e.g. not logged in): nothing to claim
+    let cancelled = false;
+    const claim = async (attempt: number) => {
+      const result = await rewardAdCoins(adToken);
+      if (cancelled) return;
+      if (result.success) {
+        toast({ title: 'Success!', description: result.message || "You've earned 5 coins!" });
+      } else if (result.retryAfterMs && attempt < 3) {
+        // Server clock says the reward time has not quite passed yet; try again shortly.
+        setTimeout(() => claim(attempt + 1), result.retryAfterMs);
+      }
+    };
+    claim(0);
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldGrantReward, adToken, toast]);
 
   useEffect(() => {
     if (isClosing) {

@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { cookies } from 'next/headers';
 import { connectToDatabase } from '@/lib/mongodb';
 import { isAdminAuthenticated } from '@/app/actions';
+import { rateLimit } from '@/lib/rate-limit';
 import type { SupportTicket } from '@/lib/support-definitions';
 import {
     saveUploadChunk,
@@ -32,6 +33,12 @@ export const runtime = 'nodejs';
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
+    // Per-IP cap on upload chunks (4 MB each): about 6 maximum-size files per 10 minutes.
+    const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
+    const verdict = rateLimit(`support-chunk:${ip}`, { limit: 400, windowMs: 10 * 60 * 1000 });
+    if (!verdict.allowed) {
+        return NextResponse.json({ success: false, message: 'Too many uploads. Please wait a few minutes.' }, { status: 429, headers: { 'Retry-After': String(verdict.retryAfterSec) } });
+    }
     try {
         const form = await req.formData();
 

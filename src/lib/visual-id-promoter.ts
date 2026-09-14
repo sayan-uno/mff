@@ -1,7 +1,3 @@
-
-
-'use server';
-
 import { connectToDatabase } from '@/lib/mongodb';
 import { type User, type Order, type Notification, type AiLog, type UserProductControl, type VisualIdPromotionLog, PreSeededLoginHistory } from '@/lib/definitions';
 import { migrateSupportDataToPromotedId } from '@/lib/support-id-promoter';

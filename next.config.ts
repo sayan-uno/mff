@@ -19,6 +19,24 @@ const nextConfig: NextConfig = {
   },
 
   
+  // Security headers for every response. CSP is intentionally not set yet
+  // (third-party scripts: Meta Pixel, Firebase, Razorpay); it will be added in
+  // report-only mode as a separate step.
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
+  },
+
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,

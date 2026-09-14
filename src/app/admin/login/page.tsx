@@ -17,7 +17,7 @@ export default async function AdminLoginPage() {
         <Card>
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold">Admin Login</CardTitle>
-            <CardDescription>Enter your password to access the admin dashboard.</CardDescription>
+            <CardDescription>Password first, then the one-time code from your Telegram.</CardDescription>
           </CardHeader>
           <CardContent>
             <LoginForm />

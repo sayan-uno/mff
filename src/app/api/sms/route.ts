@@ -5,6 +5,10 @@ import { PaymentLock, SmsWebhookLog, User, Order, Notification, Product, LegacyU
 import { ObjectId } from 'mongodb';
 import { sendPushNotification } from '@/lib/push-notifications';
 import { buildPurchaseSuccessHtml } from '@/lib/purchase-success-notifier';
+import { timingSafeEqual } from 'crypto';
+import { onceEvery, rateLimit } from '@/lib/rate-limit';
+import { sendTelegramAlert } from '@/lib/telegram';
+import { alertPaymentReceived } from '@/lib/admin-alerts';
 
 // --- SMS Parsing Logic ---
 function parseSms(body: string): { amount: number | null, upiRef: string | null } {
@@ -46,7 +50,7 @@ function parseSms(body: string): { amount: number | null, upiRef: string | null 
 }
 
 
-async function createOrderFromLock(lock: PaymentLock, smsLogId: ObjectId) {
+async function createOrderFromLock(lock: PaymentLock, smsLogId: ObjectId, upiRef: string | null) {
     const db = await connectToDatabase();
     const session = db.client.startSession();
     
@@ -80,6 +84,7 @@ async function createOrderFromLock(lock: PaymentLock, smsLogId: ObjectId) {
                 isCoinProduct: !!product.isCoinProduct,
                 createdAt: new Date(),
                 coinsAtTimeOfPurchase: user.coins,
+                ...(upiRef ? { utr: upiRef } : {}),
             };
 
             const orderResult = await db.collection<Order>('orders').insertOne(newOrder as Order, { session });
@@ -142,14 +147,29 @@ async function createOrderFromLock(lock: PaymentLock, smsLogId: ObjectId) {
             await db.collection<Notification>('notifications').insertOne(newNotification as Notification, { session });
         });
         
+        // TypeScript narrows `createdOrder` to `never` after the closure above; re-type it once.
+        const finishedOrder = createdOrder as Order | null;
+
         // Send push notification outside the transaction
         const userForPush = await db.collection<User>('users').findOne({ gamingId: lock.gamingId });
-        if (userForPush?.fcmToken && createdOrder) {
+        if (userForPush?.fcmToken && finishedOrder) {
             await sendPushNotification({
                 token: userForPush.fcmToken,
                 title: 'Garena Store: Payment Received!',
-                body: `Your payment of ₹${lock.amount} for "${createdOrder.productName}" is now processing.`,
-                imageUrl: createdOrder.productImageUrl,
+                body: `Your payment of ₹${lock.amount} for "${finishedOrder.productName}" is now processing.`,
+                imageUrl: finishedOrder.productImageUrl,
+            });
+        }
+
+        // Tell the admin (best effort; never blocks payment processing)
+        if (finishedOrder) {
+            await alertPaymentReceived({
+                gamingId: lock.gamingId,
+                productName: lock.productName,
+                amount: lock.amount,
+                status: finishedOrder.status,
+                orderId: finishedOrder._id.toString(),
+                utr: upiRef,
             });
         }
     } catch(error) {
@@ -161,27 +181,108 @@ async function createOrderFromLock(lock: PaymentLock, smsLogId: ObjectId) {
 }
 
 
-export async function POST(req: NextRequest) {
-  try {
-    const data = await req.json();
-    const smsBody = data.key;
+// ---------------------------------------------------------------------------
+// Webhook authentication and abuse protection
+//
+// The SMS forwarder (MacroDroid) must send, as JSON:
+//   { "key": "<SMS_WEBHOOK_SECRET>", "message": "<sms text>", "sender": "<sender>" }
+// The secret may instead be sent as the header `X-Webhook-Key` or
+// `Authorization: Bearer <secret>`. Requests are rejected BEFORE anything is
+// written to the database when the secret is missing/wrong, the body is too
+// large, or an IP sends too many requests. The secret itself is never logged.
+// ---------------------------------------------------------------------------
+const MAX_BODY_BYTES = 4096;
+const PER_IP_LIMIT = { limit: 30, windowMs: 60 * 1000 };
+const MIN_SECRET_LENGTH = 16;
 
-    if (!smsBody) {
-      return NextResponse.json({ success: false, message: 'SMS body not found in "key" field.' }, { status: 400 });
-    }
-    
+function webhookSecret(): string {
+  return (process.env.SMS_WEBHOOK_SECRET ?? '').trim();
+}
+
+function secretMatches(provided: string): boolean {
+  const expected = webhookSecret();
+  if (expected.length < MIN_SECRET_LENGTH || !provided) return false;
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) {
+    timingSafeEqual(b, b);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
+
+function clientIp(req: NextRequest): string {
+  return (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
+}
+
+/** One Telegram alert per 10 minutes when rejected requests pile up. */
+async function noteRejection(reason: string, ip: string) {
+  const burst = rateLimit('sms:rejections', { limit: 20, windowMs: 10 * 60 * 1000 });
+  if (!burst.allowed && onceEvery('sms:rejection-alert', 10 * 60 * 1000)) {
+    await sendTelegramAlert(`⚠️ Payment webhook: more than 20 rejected requests in 10 minutes (latest: ${reason}, IP ${ip}). Someone may be probing /api/sms.`);
+  }
+}
+
+const reject = (status: number, message: string, headers?: Record<string, string>) =>
+  NextResponse.json({ success: false, message }, { status, headers });
+
+export async function POST(req: NextRequest) {
+  const ip = clientIp(req);
+
+  // Fail closed: without a configured secret the webhook does nothing.
+  if (webhookSecret().length < MIN_SECRET_LENGTH) {
+    return reject(503, 'Webhook disabled: SMS_WEBHOOK_SECRET is not configured on the server.');
+  }
+
+  const verdict = rateLimit(`sms:${ip}`, PER_IP_LIMIT);
+  if (!verdict.allowed) {
+    await noteRejection('rate limit', ip);
+    return reject(429, 'Too many requests.', { 'Retry-After': String(verdict.retryAfterSec) });
+  }
+
+  const declared = Number(req.headers.get('content-length') ?? 0);
+  if (declared > MAX_BODY_BYTES) return reject(413, 'Request body too large.');
+  let raw = '';
+  try {
+    raw = await req.text();
+  } catch {
+    return reject(400, 'Could not read request body.');
+  }
+  if (raw.length > MAX_BODY_BYTES) return reject(413, 'Request body too large.');
+
+  let data: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return reject(400, 'Body must be a JSON object.');
+    data = parsed as Record<string, unknown>;
+  } catch {
+    return reject(400, 'Invalid JSON.');
+  }
+
+  const headerKey = req.headers.get('x-webhook-key') ?? (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const provided = String(headerKey || (typeof data.key === 'string' ? data.key : '') || '');
+  if (!secretMatches(provided)) {
+    await noteRejection('bad key', ip);
+    return reject(401, 'Unauthorized.');
+  }
+
+  const smsBody = typeof data.message === 'string' ? data.message.trim() : '';
+  if (!smsBody) return reject(400, 'SMS text not found in the "message" field.');
+  const sender = typeof data.sender === 'string' ? data.sender.slice(0, 100) : undefined;
+
+  try {
     const db = await connectToDatabase();
-    
-    // Log the incoming SMS immediately
+
+    // Log the incoming SMS (only after authentication)
     const smsLog: Omit<SmsWebhookLog, '_id'> = {
         body: smsBody,
-        sender: data.sender,
+        sender,
         receivedAt: new Date(),
         status: 'unprocessed',
     };
     const logResult = await db.collection('sms_webhook_logs').insertOne(smsLog as SmsWebhookLog);
     const smsLogId = logResult.insertedId;
-    
+
     const { amount, upiRef } = parseSms(smsBody);
     
     if (amount === null) {
@@ -195,7 +296,7 @@ export async function POST(req: NextRequest) {
     // --- Primary Match: Find an active lock for the exact amount ---
     const activeLock = await db.collection<PaymentLock>('payment_locks').findOne({ amount: amount, status: 'active' });
     if (activeLock) {
-        await createOrderFromLock(activeLock, smsLogId);
+        await createOrderFromLock(activeLock, smsLogId, upiRef);
         return NextResponse.json({ success: true, message: 'Payment verified and order created.' });
     }
     
@@ -210,7 +311,7 @@ export async function POST(req: NextRequest) {
     if (recentExpiredLocks.length > 0) {
         // Grant the order to the most recently expired lock
         const lockToProcess = recentExpiredLocks[0];
-        await createOrderFromLock(lockToProcess, smsLogId);
+        await createOrderFromLock(lockToProcess, smsLogId, upiRef);
         return NextResponse.json({ success: true, message: 'Payment verified for recently expired session.' });
     }
 

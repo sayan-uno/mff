@@ -3,6 +3,7 @@
 import { connectToDatabase } from '@/lib/mongodb';
 import { User } from '@/lib/definitions';
 import { cookies, headers } from 'next/headers';
+import { rateLimit } from '@/lib/rate-limit';
 
 /**
  * Logs the current user's IP address to their user document.
@@ -20,6 +21,10 @@ export async function logUserIp() {
   
   if (!ip) {
       return; // No IP found
+  }
+  // Floods from one address must not fill the user document; skip silently.
+  if (!rateLimit(`iplog:${ip}`, { limit: 30, windowMs: 10 * 60 * 1000 }).allowed) {
+      return;
   }
 
   try {

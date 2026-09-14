@@ -18,7 +18,7 @@ import { useRefresh } from '@/context/RefreshContext';
 import { cn } from '@/lib/utils';
 import ProductMedia from './product-media';
 import QRCode from 'react-qr-code';
-import { createPaymentLock, releasePaymentLock, checkPaymentStatus, findAvailableUpiPrice, expireOldPaymentLocks } from './purchase-actions';
+import { createPaymentLock, releasePaymentLock, checkPaymentStatus, quoteUpiPrice } from './purchase-actions';
 import { getActiveUpiId } from '@/lib/get-active-upi';
 
 // The product passed to this modal has its _id serialized to a string
@@ -126,10 +126,15 @@ export default function PurchaseModal({ product, user: initialUser, onClose }: P
         checkPurchaseEligibility(user._id.toString(), product._id)
             .then(async (result) => {
                 if (result.eligible) {
-                    const basePrice = calculateInitialPrice();
-                    const { finalPrice: availablePrice, fee } = await findAvailableUpiPrice(basePrice);
-                    setFinalPrice(availablePrice);
-                    setConvenienceFee(fee);
+                    // The server works out the price (coins applied) and the next free amount.
+                    const quote = await quoteUpiPrice(product._id);
+                    if (quote.success) {
+                        setFinalPrice(quote.finalPrice);
+                        setConvenienceFee(quote.fee);
+                    } else {
+                        setFinalPrice(calculateInitialPrice());
+                        setConvenienceFee(0);
+                    }
                     setStep('details');
                 } else {
                     toast({
@@ -181,13 +186,11 @@ export default function PurchaseModal({ product, user: initialUser, onClose }: P
     const upiId = await getActiveUpiId();
     setActiveUpiId(upiId);
 
-    // Re-check for the best available price right before creating the lock
-    const { finalPrice: availablePrice, fee } = await findAvailableUpiPrice(basePrice);
-    setFinalPrice(availablePrice);
-    setConvenienceFee(fee);
-
-    const result = await createPaymentLock(user.gamingId, product._id, product.name, availablePrice);
-    if (result.success && result.lockId) {
+    // The server decides who is paying, the price, the coins used and a unique amount.
+    const result = await createPaymentLock(product._id);
+    if (result.success) {
+        setFinalPrice(result.amount);
+        setConvenienceFee(result.fee);
         setPaymentLockId(result.lockId);
         setStep('qrPayment');
         setIsQrLoading(true); // show loader for QR
