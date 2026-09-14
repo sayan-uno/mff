@@ -4,8 +4,9 @@
  * UPI payment locks.
  *
  * A "lock" reserves a unique rupee amount (price + 0.01 … +1.00) for one buyer
- * for 90 seconds, so that the incoming bank SMS (see /api/sms) can be matched
- * back to exactly one purchase by its amount.
+ * for 5 minutes (plus a 1-minute grace window for a late bank SMS), so that the
+ * incoming bank SMS (see /api/sms) can be matched back to exactly one purchase
+ * by its amount.
  *
  * Security model (task 3 of the security plan):
  * - The browser only sends the product id. Who is paying comes from the
@@ -29,8 +30,8 @@ import type { PaymentLock, Product, User } from '@/lib/definitions';
 import { checkPurchaseEligibility } from '@/app/actions/check-purchase-eligibility';
 import { rateLimit } from '@/lib/rate-limit';
 
-const LOCK_TTL_MS = 90 * 1000;
-const RECENTLY_EXPIRED_COOLDOWN_MS = 30 * 1000; // matches the grace period in /api/sms
+const LOCK_TTL_MS = 5 * 60 * 1000; // payment session length shown to the buyer
+const RECENTLY_EXPIRED_COOLDOWN_MS = 60 * 1000; // must equal the grace period in /api/sms so a late SMS never matches a newer buyer
 const MAX_PRICE_ATTEMPTS = 100; // up to +₹1.00
 const MIN_UPI_AMOUNT = 1;
 const USER_LIMIT = { limit: 8, windowMs: 10 * 60 * 1000 };

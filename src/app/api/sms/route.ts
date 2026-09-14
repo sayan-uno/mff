@@ -8,7 +8,7 @@ import { buildPurchaseSuccessHtml } from '@/lib/purchase-success-notifier';
 import { timingSafeEqual } from 'crypto';
 import { onceEvery, rateLimit } from '@/lib/rate-limit';
 import { sendTelegramAlert } from '@/lib/telegram';
-import { alertPaymentReceived } from '@/lib/admin-alerts';
+import { alertUnmatchedPayment } from '@/lib/admin-alerts';
 
 // --- SMS Parsing Logic ---
 function parseSms(body: string): { amount: number | null, upiRef: string | null } {
@@ -160,18 +160,6 @@ async function createOrderFromLock(lock: PaymentLock, smsLogId: ObjectId, upiRef
                 imageUrl: finishedOrder.productImageUrl,
             });
         }
-
-        // Tell the admin (best effort; never blocks payment processing)
-        if (finishedOrder) {
-            await alertPaymentReceived({
-                gamingId: lock.gamingId,
-                productName: lock.productName,
-                amount: lock.amount,
-                status: finishedOrder.status,
-                orderId: finishedOrder._id.toString(),
-                utr: upiRef,
-            });
-        }
     } catch(error) {
         console.error(`Failed to create order for lock ${lock._id}:`, error);
         // If transaction fails, the webhook log remains 'unprocessed' for potential retry.
@@ -301,11 +289,11 @@ export async function POST(req: NextRequest) {
     }
     
     // --- Grace Period Match: Find a recently expired lock for the exact amount ---
-    const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
+    const graceWindowStart = new Date(Date.now() - 60 * 1000); // 1 minute after the session closed
     const recentExpiredLocks = await db.collection<PaymentLock>('payment_locks').find({
         amount: amount,
         status: 'expired',
-        expiresAt: { $gte: thirtySecondsAgo }
+        expiresAt: { $gte: graceWindowStart }
     }).sort({ expiresAt: -1 }).toArray();
 
     if (recentExpiredLocks.length > 0) {
@@ -315,8 +303,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, message: 'Payment verified for recently expired session.' });
     }
 
-    // If no match found
+    // If no match found: keep the log and tell the admin (best effort), who can
+    // investigate in Payment Sessions / SMS Logs and approve manually.
     await db.collection('sms_webhook_logs').updateOne({ _id: smsLogId }, { $set: { status: 'ignored_no_match' } });
+    await alertUnmatchedPayment({ amount, upiRef, sender, text: smsBody });
     return NextResponse.json({ success: true, message: 'No matching payment session found.' });
 
   } catch (error) {

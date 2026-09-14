@@ -51,15 +51,16 @@ export function formatUpiChangeAlert(input: { oldUpiId: string; newUpiId: string
     .join('\n');
 }
 
-export function formatPaymentReceivedAlert(input: { gamingId: string; productName: string; amount: number; status: string; orderId?: string; utr?: string | null }): string {
+export function formatUnmatchedPaymentAlert(input: { amount: number; upiRef?: string | null; sender?: string; text: string }): string {
   return [
-    `💰 Payment received: ₹${input.amount}`,
-    `Product: ${input.productName}`,
-    `Gaming ID: ${input.gamingId}`,
-    `Order status: ${input.status}`,
-    input.utr ? `UPI ref: ${input.utr}` : null,
-    input.orderId ? `Order: ${input.orderId}` : null,
+    `⚠️ Payment received but NOT verified: ₹${input.amount}`,
+    input.upiRef ? `UPI ref: ${input.upiRef}` : null,
+    input.sender ? `Sender: ${input.sender}` : null,
     `Time: ${nowText()}`,
+    '',
+    `SMS: ${input.text.slice(0, 300)}`,
+    '',
+    'No active payment session matched this amount. Check Payment Sessions and SMS Logs, then approve manually if it is genuine.',
   ]
     .filter((line) => line !== null)
     .join('\n');
@@ -76,8 +77,8 @@ export async function alertUpiChange(input: Parameters<typeof formatUpiChangeAle
   return sendTelegramAlert(formatUpiChangeAlert(input));
 }
 
-/** Best effort: informational only, never blocks payment processing. */
-export async function alertPaymentReceived(input: Parameters<typeof formatPaymentReceivedAlert>[0]): Promise<void> {
-  const result = await sendTelegramAlert(formatPaymentReceivedAlert(input));
-  if (!result.ok) console.error('[alerts] payment alert not delivered:', result.reason);
+/** Best effort: a payment SMS arrived but no session matched; the admin must look. */
+export async function alertUnmatchedPayment(input: Parameters<typeof formatUnmatchedPaymentAlert>[0]): Promise<void> {
+  const result = await sendTelegramAlert(formatUnmatchedPaymentAlert(input));
+  if (!result.ok) console.error('[alerts] unmatched payment alert not delivered:', result.reason);
 }

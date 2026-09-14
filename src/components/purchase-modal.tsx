@@ -34,7 +34,7 @@ interface PurchaseModalProps {
 
 type ModalStep = 'verifying' | 'register' | 'details' | 'processing' | 'qrPayment' | 'success';
 
-const QR_EXPIRY_SECONDS = 90; // 1.5 minutes
+const QR_EXPIRY_SECONDS = 5 * 60; // 5 minutes, same as the server-side payment session
 
 export default function PurchaseModal({ product, user: initialUser, onClose }: PurchaseModalProps) {
   const [isOpen, setIsOpen] = useState(true);
