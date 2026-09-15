@@ -25,6 +25,7 @@ import { useToast } from '@/hooks/use-toast';
 import Script from 'next/script';
 import MetaPixelPurchaseTracker from '@/components/meta-pixel-purchase-tracker';
 import BrowserRedirect from '@/components/browser-redirect';
+import PresenceBeacon from '@/components/presence/presence-beacon';
 
 
 const FCM_TOKEN_KEY = 'fcm_token';
@@ -305,6 +306,7 @@ export default function RootLayout({
       </head>
       <body className={cn('font-body antialiased flex flex-col min-h-screen')}>
         <BrowserRedirect />
+        <PresenceBeacon />
         <RefreshProvider>
           {isLoading && <LoadingScreen />}
           <div className={cn('flex flex-col flex-1', isAdPage && 'h-screen')}>

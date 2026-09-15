@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { logoutAdmin } from '@/app/actions';
-import { Home, ListChecks, ListX, Users, LogOut, Banknote, Tag, ArchiveRestore, Coins, ShieldBan, Box, EyeOff, Bell, CalendarPlus, MessageCircle, SlidersHorizontal, FileCode, PersonStanding, BadgeCheck, History, Clapperboard, BellRing, GalleryHorizontal, Timer, MessageSquareText, ShieldX, Fingerprint, Ban, Download, Activity, CreditCard, Headset, ReceiptText, TrendingUp, ShieldAlert, FolderOpen, ShieldCheck } from 'lucide-react';
+import { Home, ListChecks, ListX, Users, LogOut, Banknote, Tag, ArchiveRestore, Coins, ShieldBan, Box, EyeOff, Bell, CalendarPlus, MessageCircle, SlidersHorizontal, FileCode, PersonStanding, BadgeCheck, History, Clapperboard, BellRing, GalleryHorizontal, Timer, MessageSquareText, ShieldX, Fingerprint, Ban, Download, Activity, CreditCard, Headset, ReceiptText, TrendingUp, ShieldAlert, FolderOpen, ShieldCheck, Wifi } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
@@ -15,6 +15,7 @@ const navItems = [
   { href: '/admin/promoted-ids', label: 'Promoted IDs', icon: BadgeCheck },
   { href: '/admin/visualize-id', label: 'Visualize ID', icon: PersonStanding },
   { href: '/admin/active-users', label: 'Active Users', icon: Activity },
+  { href: '/admin/online', label: 'Online Now', icon: Wifi },
   { href: '/admin/users', label: 'User Management', icon: ShieldBan },
   { href: '/admin/notifications', label: 'Send Notification', icon: Bell },
   { href: '/admin/html-notifier', label: 'HTML Notifier', icon: FileCode },
