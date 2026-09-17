@@ -1668,6 +1668,10 @@ export async function vanishProduct(productId: string): Promise<{ success: boole
 
 export async function getVanishedProducts() {
     noStore();
+    // Admin-only listing. Every exported function in this file is a public server
+    // action endpoint, so it checks the admin session itself instead of relying
+    // on the page that calls it.
+    if (!(await isAdminAuthenticated())) return [];
     const db = await connectToDatabase();
     const productsFromDb = await db.collection<Product>('products')
       .find({ isVanished: true })
