@@ -3,6 +3,7 @@
 
 import { connectToDatabase } from '@/lib/mongodb';
 import { headers, cookies } from 'next/headers';
+import { getClientIp, UNKNOWN_IP } from '@/lib/client-ip';
 import type { BlockedIdentifier } from '@/lib/definitions';
 
 /**
@@ -36,9 +37,8 @@ export async function checkAndBlockFingerprint(fingerprint: string): Promise<{ i
 
 export async function checkBlockStatus(): Promise<{ isBlocked: boolean; reason: string | null }> {
   try {
-    const forwardedFor = headers().get('x-forwarded-for');
-    const realIp = headers().get('x-real-ip');
-    const ip = forwardedFor ? forwardedFor.split(',')[0] : realIp;
+    const resolvedIp = getClientIp(await headers());
+    const ip = resolvedIp === UNKNOWN_IP ? null : resolvedIp;
     const gamingId = cookies().get('gaming_id')?.value;
     
     // Fingerprint check is handled by checkAndBlockFingerprint

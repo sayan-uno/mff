@@ -15,6 +15,7 @@
  */
 
 import { cookies, headers } from 'next/headers';
+import { getClientIp } from '@/lib/client-ip';
 import { unstable_noStore as noStore } from 'next/cache';
 import {
   ADMIN_CHALLENGE_COOKIE,
@@ -52,8 +53,7 @@ const error = (message: string, restart = false): LoginStepResult => ({ status: 
 
 async function clientInfo() {
   const h = await headers();
-  const forwarded = (h.get('x-forwarded-for') ?? '').split(',')[0].trim();
-  const ip = forwarded || h.get('x-real-ip') || 'unknown';
+  const ip = getClientIp(h);
   const userAgent = (h.get('user-agent') ?? 'unknown').slice(0, 200);
   return { ip, userAgent };
 }

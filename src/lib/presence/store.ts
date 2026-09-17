@@ -29,6 +29,7 @@ import {
 
 const VISITORS_COLLECTION = 'online_visitors';
 const SAMPLES_COLLECTION = 'online_samples';
+const USERS_COLLECTION = 'users';
 
 interface VisitorDoc {
     _id: string; // visitor id made in the browser
@@ -36,7 +37,8 @@ interface VisitorDoc {
     firstSeen: Date; // start of the current session ("online since")
     lastSeen: Date; // last heartbeat (TTL index)
     path: string;
-    gamingId: string | null; // registered Gaming ID (from the cookie) or null for a guest
+    gamingId: string | null; // VERIFIED registered Gaming ID, or null for a guest
+    claimedId: string | null; // raw gaming_id cookie value it was checked from (unsigned, never shown)
     ip: string;
     ua: string;
     device: string;
@@ -55,7 +57,7 @@ interface SampleDoc {
 export interface HeartbeatInput {
     visitorId: string;
     path: string;
-    gamingId: string | null;
+    claimedGamingId: string | null; // raw, unverified gaming_id cookie value
     ip: string;
     userAgent: string;
     standalone: boolean;
@@ -81,7 +83,7 @@ async function collections() {
             });
     }
     await indexesReady;
-    return { visitors, samples };
+    return { db, visitors, samples };
 }
 
 function onlineFilter(now: Date) {
@@ -93,34 +95,54 @@ function toIso(value: Date | undefined, fallback: Date): string {
     return Number.isNaN(date.getTime()) ? fallback.toISOString() : date.toISOString();
 }
 
+/**
+ * The gaming_id cookie is not signed, so a visitor can send any value in it.
+ * Only call someone "registered" when that Gaming ID really exists.
+ */
+async function verifyGamingId(db: Awaited<ReturnType<typeof connectToDatabase>>, claimed: string | null): Promise<string | null> {
+    if (!claimed) return null;
+    const user = await db.collection(USERS_COLLECTION).findOne({ gamingId: claimed }, { projection: { _id: 1 } });
+    return user ? claimed : null;
+}
+
 /** A heartbeat: the visitor is on `path` right now. */
 export async function recordHeartbeat(input: HeartbeatInput): Promise<void> {
-    const { visitors } = await collections();
+    const { db, visitors } = await collections();
     const now = new Date();
     const ua = (input.userAgent || '').slice(0, MAX_USER_AGENT_LENGTH);
+    const claimedId = input.claimedGamingId;
     const fields = {
         online: true,
         lastSeen: now,
         path: input.path,
-        gamingId: input.gamingId,
         ip: input.ip,
         ua,
         device: describeDevice(ua),
         standalone: input.standalone,
     };
 
-    // Common case: the visitor is already online, so keep their "online since".
+    // Hot path (almost every heartbeat): already online and the cookie is the
+    // same as last time. One write, no lookup, "online since" kept.
     const kept = await visitors.updateOne(
-        { _id: input.visitorId, ...onlineFilter(now) },
+        { _id: input.visitorId, ...onlineFilter(now), claimedId },
         { $set: fields, $inc: { heartbeats: 1 } },
     );
     if (kept.matchedCount === 0) {
-        // New visitor, or one who was away: this heartbeat starts a fresh session.
-        await visitors.updateOne(
-            { _id: input.visitorId },
-            { $set: { ...fields, firstSeen: now, heartbeats: 1 } },
-            { upsert: true },
+        // A new session, or the cookie changed (registered, logged out): check it once.
+        const gamingId = await verifyGamingId(db, claimedId);
+        const identity = { ...fields, claimedId, gamingId };
+        const stillOnline = await visitors.updateOne(
+            { _id: input.visitorId, ...onlineFilter(now) },
+            { $set: identity, $inc: { heartbeats: 1 } },
         );
+        if (stillOnline.matchedCount === 0) {
+            // New visitor, or one who was away: this heartbeat starts a fresh session.
+            await visitors.updateOne(
+                { _id: input.visitorId },
+                { $set: { ...identity, firstSeen: now, heartbeats: 1 } },
+                { upsert: true },
+            );
+        }
     }
 
     await sampleIfDue();
@@ -208,7 +230,7 @@ export async function getOnlineSnapshot(range: HistoryRangeHours): Promise<Onlin
         visitors.countDocuments({ ...filter, gamingId: { $ne: null } }),
         visitors.countDocuments({ ...filter, standalone: true }),
         visitors
-            .find(filter, { projection: { ua: 0, heartbeats: 0 } })
+            .find(filter, { projection: { ua: 0, heartbeats: 0, claimedId: 0 } })
             .sort({ lastSeen: -1 })
             .limit(ADMIN_LIST_LIMIT)
             .toArray(),

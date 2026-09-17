@@ -29,6 +29,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import type { PaymentLock, Product, User } from '@/lib/definitions';
 import { checkPurchaseEligibility } from '@/app/actions/check-purchase-eligibility';
 import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/client-ip';
 
 const LOCK_TTL_MS = 5 * 60 * 1000; // payment session length shown to the buyer
 const RECENTLY_EXPIRED_COOLDOWN_MS = 60 * 1000; // must equal the grace period in /api/sms so a late SMS never matches a newer buyer
@@ -75,7 +76,7 @@ async function currentGamingId(): Promise<string | null> {
 
 async function clientIp(): Promise<string> {
   const h = await headers();
-  return (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || 'unknown';
+  return getClientIp(h);
 }
 
 /** Marks stale active locks as expired (sweeper; also run by /api/sms). */

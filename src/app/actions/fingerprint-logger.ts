@@ -5,6 +5,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { User } from '@/lib/definitions';
 import { cookies, headers } from 'next/headers';
 import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/client-ip';
 
 /**
  * Logs the current user's device fingerprint to their user document.
@@ -15,7 +16,7 @@ export async function logUserFingerprint(fingerprint: string) {
     return; // No user logged in or no fingerprint generated.
   }
   const requestHeaders = await headers();
-  const ip = (requestHeaders.get('x-forwarded-for') ?? '').split(',')[0].trim() || requestHeaders.get('x-real-ip') || 'unknown';
+  const ip = getClientIp(requestHeaders);
   if (typeof fingerprint !== 'string' || fingerprint.length > 200 || !rateLimit(`fplog:${ip}`, { limit: 30, windowMs: 10 * 60 * 1000 }).allowed) {
     return; // Malformed or flooding: skip silently.
   }

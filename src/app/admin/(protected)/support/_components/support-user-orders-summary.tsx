@@ -4,8 +4,9 @@
 // Fills the (previously blank) middle of the green conversation header with a
 // first impression of the customer: how many orders the report's UID has (store
 // coin orders included, broken down by status) and the newest two orders by
-// name. On phones the header has no spare room, so the same block is rendered
-// as a slim green row directly under the header instead.
+// name. The header only has room for it on wide screens (1440px and up); on
+// laptops, tablets and phones the same block is rendered as a slim green row
+// directly under the header instead, where the order names fit in full.
 //
 // Purely additive: it reads through the new admin-only order-summary action and
 // never touches any existing support behaviour. One fetch per opened report is
@@ -133,14 +134,18 @@ function RecentOrderRow({ order }: { order: SupportRecentOrder }) {
         .filter(Boolean)
         .join(' · ');
     return (
-        <div className="flex items-center gap-1.5 min-w-0 text-[11px] leading-[15px]" title={tooltip}>
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden text-[11px] leading-[15px]" title={tooltip}>
             <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDotClass(order.status)}`} aria-hidden="true" />
-            <span className="truncate font-medium">{order.productName}</span>
+            {/* The name is what the admin is looking for, so it never shrinks: it takes
+                its natural width (a very long name is capped at 65% of the row and
+                gets an ellipsis) and only the trailing details give way. The status
+                is still carried by the dot colour. */}
+            <span className="max-w-[65%] shrink-0 truncate font-medium">{order.productName}</span>
             {order.isCoinProduct && (
                 <span className="shrink-0 rounded bg-white/15 px-1 text-[9px] font-semibold uppercase tracking-wide">coin</span>
             )}
             <span className="shrink-0 text-white/75">{formatPrice(order.finalPrice)}</span>
-            <span className="shrink-0 text-white/60">
+            <span className="min-w-0 shrink truncate text-white/60">
                 · {order.status || 'Unknown'}
                 {order.createdAt ? ` · ${timeAgo(order.createdAt)}` : ''}
             </span>
@@ -182,7 +187,7 @@ export default function SupportUserOrdersSummary({ loading, summary, className =
     const allOrdersHref = `/admin/all-orders?search=${encodeURIComponent(summary.sourceUid)}`;
 
     return (
-        <div className={`items-center gap-3 ${className}`}>
+        <div className={`items-center gap-3 overflow-hidden ${className}`}>
             {/* Order count (all statuses, coin orders included) + status breakdown.
                 Clicking opens the full order list for this UID in a new tab so
                 the open conversation is not lost. */}
@@ -191,7 +196,7 @@ export default function SupportUserOrdersSummary({ loading, summary, className =
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Open all orders for this ID (new tab)"
-                className="shrink-0 leading-tight rounded-md px-1.5 py-0.5 -mx-1.5 hover:bg-white/10"
+                className="shrink-0 leading-tight rounded-md px-1.5 py-0.5 hover:bg-white/10"
             >
                 <div className="flex items-center gap-1 text-[13px] font-semibold">
                     <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
@@ -205,7 +210,7 @@ export default function SupportUserOrdersSummary({ loading, summary, className =
 
             {/* Newest orders (name, price, status, when). */}
             {hasOrders && summary.latestOrders.length > 0 && (
-                <div className="min-w-0 flex-1 border-l border-white/20 pl-3" title="Newest orders on this ID">
+                <div className="min-w-0 flex-1 overflow-hidden border-l border-white/20 pl-3" title="Newest orders on this ID">
                     {summary.latestOrders.map((order) => (
                         <RecentOrderRow key={order.id} order={order} />
                     ))}

@@ -44,6 +44,7 @@ import { buildPurchaseSuccessHtml } from '@/lib/purchase-success-notifier';
 import { ADMIN_CHALLENGE_COOKIE, ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from '@/lib/admin-auth/session';
 import { getSessionVersion } from '@/lib/admin-auth/store';
 import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/client-ip';
 import { AD_REWARD_COINS, claimAdReward, startAdRewardSession } from '@/lib/ad-rewards';
 import { GIFT_RULES, clearGiftFailures, getGiftLock, recordGiftPasswordFailure } from '@/lib/coin-guard';
 
@@ -75,7 +76,7 @@ export async function askQuestion(
   // Gentle limits: no human hits these; they protect the AI bill from scripts.
   const askerId = (await cookies()).get('gaming_id')?.value ?? 'guest';
   const askerHeaders = await headers();
-  const askerIp = (askerHeaders.get('x-forwarded-for') ?? '').split(',')[0].trim() || askerHeaders.get('x-real-ip') || 'unknown';
+  const askerIp = getClientIp(askerHeaders);
   if (!rateLimit(`chat:user:${askerId}`, { limit: 20, windowMs: 60 * 1000 }).allowed || !rateLimit(`chat:ip:${askerIp}`, { limit: 40, windowMs: 60 * 1000 }).allowed) {
     return { success: false, error: 'Too many questions in a short time. Please wait a minute and try again.' };
   }
@@ -685,7 +686,7 @@ export async function transferCoins(prevState: FormState, formData: FormData): P
   }
 
   const requestHeaders = await headers();
-  const senderIp = (requestHeaders.get('x-forwarded-for') ?? '').split(',')[0].trim() || requestHeaders.get('x-real-ip') || 'unknown';
+  const senderIp = getClientIp(requestHeaders);
   if (!rateLimit(`gift:user:${senderGamingId}`, { limit: 10, windowMs: 10 * 60 * 1000 }).allowed || !rateLimit(`gift:ip:${senderIp}`, { limit: 20, windowMs: 10 * 60 * 1000 }).allowed) {
     return { success: false, message: 'Too many transfer attempts. Please wait a few minutes.' };
   }

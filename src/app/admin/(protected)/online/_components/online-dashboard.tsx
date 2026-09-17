@@ -27,6 +27,7 @@ import {
     ADMIN_REFRESH_MS,
     HISTORY_RANGES,
     bucketMinutesFor,
+    isSafeVisitorPath,
     type HistoryRangeHours,
     type OnlineSample,
     type OnlineSnapshot,
@@ -184,16 +185,24 @@ function VisitorRow({ visitor, now }: { visitor: OnlineVisitor; now: number }) {
                 )}
             </TableCell>
             <TableCell className="max-w-[220px]">
-                <a
-                    href={visitor.path}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex max-w-full items-center gap-1 font-mono text-xs hover:underline"
-                    title={visitor.path}
-                >
-                    <span className="truncate">{visitor.path}</span>
-                    <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
-                </a>
+                {/* Only a plain same-site path ever becomes a link (the API refuses
+                    anything else, this is the second lock on the same door). */}
+                {isSafeVisitorPath(visitor.path) ? (
+                    <a
+                        href={visitor.path}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex max-w-full items-center gap-1 font-mono text-xs hover:underline"
+                        title={visitor.path}
+                    >
+                        <span className="truncate">{visitor.path}</span>
+                        <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                    </a>
+                ) : (
+                    <span className="block truncate font-mono text-xs text-muted-foreground" title="Not a valid page path, shown as text only">
+                        {visitor.path.slice(0, 60)}
+                    </span>
+                )}
             </TableCell>
             <TableCell className="whitespace-nowrap text-xs">
                 <span className="inline-flex items-center gap-1.5">
@@ -229,7 +238,10 @@ export default function OnlineDashboard({ initial }: { initial: OnlineSnapshot }
     const [range, setRange] = useState<HistoryRangeHours>(initial.historyHours);
     const [refreshing, setRefreshing] = useState(false);
     const [paused, setPaused] = useState(false);
-    const [now, setNow] = useState(() => Date.now());
+    // Starts at the snapshot's own timestamp so the server-rendered HTML and the
+    // browser's first render print identical "x ago" texts (no hydration
+    // mismatch); the real clock takes over right after mount.
+    const [now, setNow] = useState(() => new Date(initial.generatedAt).getTime());
     const [showTable, setShowTable] = useState(false);
     const rangeRef = useRef(range);
 
@@ -273,6 +285,7 @@ export default function OnlineDashboard({ initial }: { initial: OnlineSnapshot }
 
     // Keeps the "x seconds ago" texts moving between refreshes.
     useEffect(() => {
+        setNow(Date.now());
         const interval = window.setInterval(() => setNow(Date.now()), 5000);
         return () => window.clearInterval(interval);
     }, []);

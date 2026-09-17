@@ -7,6 +7,7 @@ import { sendPushNotification } from '@/lib/push-notifications';
 import { buildPurchaseSuccessHtml } from '@/lib/purchase-success-notifier';
 import { timingSafeEqual } from 'crypto';
 import { onceEvery, rateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/client-ip';
 import { sendTelegramAlert } from '@/lib/telegram';
 import { alertUnmatchedPayment } from '@/lib/admin-alerts';
 
@@ -200,7 +201,7 @@ function secretMatches(provided: string): boolean {
 }
 
 function clientIp(req: NextRequest): string {
-  return (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
+  return getClientIp(req.headers);
 }
 
 /** One Telegram alert per 10 minutes when rejected requests pile up. */

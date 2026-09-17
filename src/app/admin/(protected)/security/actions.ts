@@ -8,6 +8,7 @@
  */
 
 import { cookies, headers } from 'next/headers';
+import { getClientIp } from '@/lib/client-ip';
 import { unstable_noStore as noStore } from 'next/cache';
 import { isAdminAuthenticated } from '@/app/actions';
 import { ADMIN_SESSION_COOKIE, adminCookieOptions, createAdminSessionToken } from '@/lib/admin-auth/session';
@@ -26,7 +27,7 @@ type Result = { success: true; message: string } | { success: false; message: st
 
 async function requestInfo() {
   const h = await headers();
-  const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || 'unknown';
+  const ip = getClientIp(h);
   const when = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
   return { ip, when };
 }

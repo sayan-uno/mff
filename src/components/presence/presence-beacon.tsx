@@ -121,11 +121,14 @@ const visible = () => document.visibilityState === 'visible';
 const online = () => navigator.onLine !== false;
 
 let lastSentAt = 0;
+// "hidden" and "pagehide" both fire when a page unloads: say bye once per departure.
+let hasLeft = false;
 
 /** One heartbeat, only when the tab is visible and the device is online. */
 function heartbeat(): void {
     if (!visible() || !online()) return;
     lastSentAt = Date.now();
+    hasLeft = false;
     send('hb');
 }
 
@@ -168,6 +171,8 @@ export default function PresenceBeacon() {
         // Hidden or closed: tell the server right away, and tell sibling tabs.
         const leave = () => {
             sleep();
+            if (hasLeft) return;
+            hasLeft = true;
             send('bye');
             try {
                 localStorage.setItem(PRESENCE_SYNC_KEY, String(Date.now()));

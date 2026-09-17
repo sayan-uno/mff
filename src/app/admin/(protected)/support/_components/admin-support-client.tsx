@@ -1215,12 +1215,12 @@ export default function AdminSupportClient({ initialTickets }: Props) {
                       {activeTicket.visualGamingId || activeTicket.gamingId} · {activeTicket.status}
                     </div>
                   </div>
-                  {/* Orders at a glance (desktop): fills the middle of the header
-                      with the UID's order count + newest two orders. */}
+                  {/* Orders at a glance (wide screens, 1440px+): fills the middle of
+                      the header with the UID's order count + newest two orders. */}
                   <SupportUserOrdersSummary
                     loading={ordersLoading}
                     summary={orderSummary}
-                    className="hidden md:flex flex-1 min-w-0 max-w-[460px]"
+                    className="hidden min-[1440px]:flex flex-[3_1_0%] min-w-0 max-w-[560px]"
                   />
                   <Button
                     size="sm"
@@ -1296,11 +1296,11 @@ export default function AdminSupportClient({ initialTickets }: Props) {
                   </DropdownMenu>
                 </div>
 
-                {/* Orders at a glance (phone): the header has no spare room on
-                    small screens, so the same block sits in a slim green row
-                    directly under it. Same data as the desktop block. */}
+                {/* Orders at a glance (below 1440px): the header has no spare room
+                    on laptops, tablets and phones, so the same block sits in a slim
+                    green row directly under it, where the names fit in full. */}
                 {(ordersLoading || orderSummary) && (
-                  <div className="md:hidden bg-[#075E54] text-white px-3 pb-2 -mt-px">
+                  <div className="min-[1440px]:hidden bg-[#075E54] text-white px-3 pb-2 -mt-px">
                     <SupportUserOrdersSummary loading={ordersLoading} summary={orderSummary} className="flex min-w-0" />
                   </div>
                 )}

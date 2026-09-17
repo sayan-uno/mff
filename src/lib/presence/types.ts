@@ -43,6 +43,28 @@ export const MAX_BODY_BYTES = 1024;
 export const MAX_PATH_LENGTH = 200;
 export const MAX_USER_AGENT_LENGTH = 256;
 
+/** Longest gaming_id cookie value that is even looked up. */
+export const MAX_GAMING_ID_LENGTH = 64;
+
+/**
+ * True for a plain same-site pathname such as "/support". Rejects anything a
+ * browser could treat as ANOTHER website when it is used as a link ("//host",
+ * "/\host", any backslash), plus whitespace and control characters. Used by
+ * the API route before storing a path and again by the admin page before
+ * turning a stored path into a link.
+ */
+export function isSafeVisitorPath(path: unknown): boolean {
+    if (typeof path !== 'string') return false;
+    if (path.length === 0 || path.length > MAX_PATH_LENGTH) return false;
+    if (!path.startsWith('/') || path.startsWith('//')) return false;
+    for (let index = 0; index < path.length; index++) {
+        const code = path.charCodeAt(index);
+        // <= 32: control characters and space, 127: DEL, 92: backslash
+        if (code <= 32 || code === 127 || code === 92) return false;
+    }
+    return true;
+}
+
 /** Visitor ids are random hex made in the browser (32 chars normally). */
 export const VISITOR_ID_PATTERN = /^[a-f0-9]{16,64}$/;
 
