@@ -92,6 +92,7 @@ export interface Order {
     createdAt: Date;
     coinsAtTimeOfPurchase?: number; // Record user's coin balance at the time of purchase
     isPurchaseTracked?: boolean; // Flag to check if the purchase event has been sent to Meta Pixel
+    payCode?: string; // Pay code of the UPI payment session this order came from (see src/lib/pay-code.ts)
 }
 
 export interface Withdrawal {
@@ -223,6 +224,8 @@ export interface PaymentLock {
     status: 'active' | 'expired' | 'completed';
     createdAt: Date;
     expiresAt: Date;
+    payCode?: string; // Short unique reference put at the front of the UPI note (see src/lib/pay-code.ts)
+    upiNote?: string; // The exact note text sent in the QR link: "<payCode> <short product name>"
 }
 
 export interface SmsWebhookLog {

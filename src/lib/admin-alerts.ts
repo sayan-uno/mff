@@ -61,6 +61,7 @@ export function formatUnmatchedPaymentAlert(input: { amount: number; upiRef?: st
     `SMS: ${input.text.slice(0, 300)}`,
     '',
     'No active payment session matched this amount. Check Payment Sessions and SMS Logs, then approve manually if it is genuine.',
+    'Tip: open this payment in your UPI app. The note starts with a 6-character pay code. Search that code on the Payment Sessions page to find the buyer.',
   ]
     .filter((line) => line !== null)
     .join('\n');

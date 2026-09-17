@@ -2,6 +2,7 @@
 'use server';
 
 import { isAdminAuthenticated } from '@/app/actions';
+import { findPayCodeInText, partialPayCode } from '@/lib/pay-code';
 import { PaymentLock, User, Product, Order, Notification, LegacyUser } from '@/lib/definitions';
 import { connectToDatabase } from '@/lib/mongodb';
 import { unstable_noStore as noStore } from 'next/cache';
@@ -33,6 +34,12 @@ function buildPaymentSessionsQuery(search: string, startDate?: string, endDate?:
             { gamingId: { $regex: search, $options: 'i' } },
             { productName: { $regex: search, $options: 'i' } }
         ];
+        // Pay code: the bare code, lower case, or the whole note pasted from the UPI
+        // app all find the session; three or more characters match as a prefix.
+        const fullCode = findPayCodeInText(search);
+        const partialCode = fullCode ? null : partialPayCode(search);
+        if (fullCode) query.$or.push({ payCode: fullCode });
+        else if (partialCode) query.$or.push({ payCode: { $regex: `^${partialCode}` } });
     }
 
     const start = istLocalToUtcDate(startDate || '');
@@ -212,6 +219,7 @@ export async function approvePaymentManually(lockId: string): Promise<{ success:
                 isCoinProduct: !!product.isCoinProduct,
                 createdAt: new Date(),
                 coinsAtTimeOfPurchase: user.coins,
+                ...(lock.payCode ? { payCode: lock.payCode } : {}),
             };
 
             const orderResult = await db.collection<Order>('orders').insertOne(newOrder as Order, { session });

@@ -129,6 +129,15 @@ export default function PaymentSessionList({ initialSessions, initialHasMore, to
         }
     };
 
+    const handleCopyCode = async (code: string) => {
+        try {
+            await navigator.clipboard.writeText(code);
+            toast({ title: 'Copied', description: `Pay code ${code} copied.` });
+        } catch {
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not access the clipboard.' });
+        }
+    };
+
     const handleDeleteOne = (id: string) => {
         startDeleting(async () => {
             const result = await deletePaymentSessions([id]);
@@ -228,7 +237,7 @@ export default function PaymentSessionList({ initialSessions, initialHasMore, to
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="search">Search</Label>
-                                <Input id="search" name="search" placeholder="Gaming ID or Product..." defaultValue={search} />
+                                <Input id="search" name="search" placeholder="Gaming ID, Product or Pay code..." defaultValue={search} />
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="startDate">Created from (IST)</Label>
@@ -341,6 +350,24 @@ export default function PaymentSessionList({ initialSessions, initialHasMore, to
                                         <div className="space-y-1">
                                             <p className="font-semibold">{session.productName}</p>
                                             <p className="text-sm font-mono text-muted-foreground">{session.gamingId}</p>
+                                            {/* Pay code: leads the UPI note, so it is what the admin sees in
+                                                their own UPI app for this payment. Click to copy. */}
+                                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                                Pay code:
+                                                {session.payCode ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyCode(session.payCode as string)}
+                                                        className="inline-flex items-center gap-1 font-mono font-semibold tracking-widest text-foreground hover:underline"
+                                                        title={`UPI note: ${session.upiNote || session.payCode} (click to copy the code)`}
+                                                    >
+                                                        {session.payCode}
+                                                        <Copy className="h-3 w-3 opacity-60" />
+                                                    </button>
+                                                ) : (
+                                                    <span title="This session was created before pay codes existed">—</span>
+                                                )}
+                                            </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">

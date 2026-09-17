@@ -29,6 +29,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import type { PaymentLock, Product, User } from '@/lib/definitions';
 import { checkPurchaseEligibility } from '@/app/actions/check-purchase-eligibility';
 import { rateLimit } from '@/lib/rate-limit';
+import { buildUpiNote, generatePayCode } from '@/lib/pay-code';
 import { getClientIp } from '@/lib/client-ip';
 
 const LOCK_TTL_MS = 5 * 60 * 1000; // payment session length shown to the buyer
@@ -43,7 +44,7 @@ export type QuoteResult =
   | { success: false; message: string };
 
 export type CreateLockResult =
-  | { success: true; lockId: string; amount: number; fee: number; coinsToUse: number; expiresInSec: number }
+  | { success: true; lockId: string; amount: number; fee: number; coinsToUse: number; expiresInSec: number; payCode: string; upiNote: string }
   | { success: false; message: string };
 
 // ---------------------------------------------------------------------------
@@ -52,19 +53,27 @@ export type CreateLockResult =
 
 let indexReady: Promise<void> | undefined;
 
-/** Best effort: unique amount among active locks. Skipped if existing data conflicts. */
+/**
+ * Best effort indexes. Skipped (with a log line) if existing data conflicts:
+ * - unique amount among ACTIVE locks, so two buyers never share an amount;
+ * - unique pay code across ALL locks that have one (older locks have none), so
+ *   a code read from a UPI app always points at exactly one session.
+ */
 async function ensureLockIndex() {
   if (!indexReady) {
-    indexReady = connectToDatabase()
-      .then((db) =>
-        db
-          .collection<PaymentLock>('payment_locks')
-          .createIndex({ amount: 1 }, { unique: true, partialFilterExpression: { status: 'active' }, name: 'unique_active_amount' })
-      )
-      .then(() => undefined)
-      .catch((error) => {
-        console.error('[payment-locks] could not create unique index (continuing without it):', error?.message ?? error);
-      });
+    indexReady = (async () => {
+      const locks = (await connectToDatabase()).collection<PaymentLock>('payment_locks');
+      try {
+        await locks.createIndex({ amount: 1 }, { unique: true, partialFilterExpression: { status: 'active' }, name: 'unique_active_amount' });
+      } catch (error) {
+        console.error('[payment-locks] could not create unique amount index (continuing without it):', (error as Error)?.message ?? error);
+      }
+      try {
+        await locks.createIndex({ payCode: 1 }, { unique: true, partialFilterExpression: { payCode: { $type: 'string' } }, name: 'unique_pay_code' });
+      } catch (error) {
+        console.error('[payment-locks] could not create unique pay code index (continuing without it):', (error as Error)?.message ?? error);
+      }
+    })();
   }
   await indexReady;
 }
@@ -183,6 +192,11 @@ export async function createPaymentLock(productId: string): Promise<CreateLockRe
     for (let attempt = 0; attempt < 3; attempt++) {
       const { finalPrice, fee } = await findAvailableUpiPrice(basePrice);
       const now = new Date();
+      // Short reference for the UPI note. Verification still matches on the amount
+      // (the bank SMS has no note); the code is how the admin finds this session
+      // from their own UPI app when a payment arrives late.
+      const payCode = generatePayCode();
+      const upiNote = buildUpiNote(payCode, product.name);
       const newLock: Omit<PaymentLock, '_id'> = {
         gamingId,
         productId: product._id.toString(),
@@ -191,12 +205,14 @@ export async function createPaymentLock(productId: string): Promise<CreateLockRe
         status: 'active',
         createdAt: now,
         expiresAt: new Date(now.getTime() + LOCK_TTL_MS),
+        payCode,
+        upiNote,
       };
       try {
         const result = await locks.insertOne(newLock as PaymentLock);
-        return { success: true, lockId: result.insertedId.toString(), amount: finalPrice, fee, coinsToUse, expiresInSec: Math.floor(LOCK_TTL_MS / 1000) };
+        return { success: true, lockId: result.insertedId.toString(), amount: finalPrice, fee, coinsToUse, expiresInSec: Math.floor(LOCK_TTL_MS / 1000), payCode, upiNote };
       } catch (error) {
-        // Duplicate active amount (unique index) → another buyer got it first; try the next slot.
+        // Duplicate active amount or (one in 244 million) pay code → try again with fresh ones.
         if ((error as { code?: number })?.code !== 11000) throw error;
       }
     }

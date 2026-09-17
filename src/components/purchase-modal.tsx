@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import ProductMedia from './product-media';
 import QRCode from 'react-qr-code';
 import { createPaymentLock, releasePaymentLock, checkPaymentStatus, quoteUpiPrice } from './purchase-actions';
+import { sanitizeUpiNoteText } from '@/lib/pay-code';
 import { getActiveUpiId } from '@/lib/get-active-upi';
 
 // The product passed to this modal has its _id serialized to a string
@@ -50,6 +51,10 @@ export default function PurchaseModal({ product, user: initialUser, onClose }: P
 
   const [finalPrice, setFinalPrice] = useState(0);
   const [convenienceFee, setConvenienceFee] = useState(0);
+  // Note text made by the server for this payment session. It starts with a short
+  // pay code so the admin can find a late payment from their own UPI app. It only
+  // travels inside the QR link: nothing about it is shown to the buyer.
+  const [upiNote, setUpiNote] = useState('');
 
   const router = useRouter();
   const { toast } = useToast();
@@ -192,6 +197,7 @@ export default function PurchaseModal({ product, user: initialUser, onClose }: P
         setFinalPrice(result.amount);
         setConvenienceFee(result.fee);
         setPaymentLockId(result.lockId);
+        setUpiNote(result.upiNote);
         setStep('qrPayment');
         setIsQrLoading(true); // show loader for QR
         setTimeout(() => setIsQrLoading(false), 1000);
@@ -379,7 +385,9 @@ export default function PurchaseModal({ product, user: initialUser, onClose }: P
             </>
         );
     case 'qrPayment':
-        const upiUrl = `upi://pay?pa=${activeUpiId}&pn=Garena&am=${finalPrice}&cu=INR&tn=${product.name}`;
+        // The note is cleaned to letters, digits and spaces and then URL-encoded, so a
+        // product name containing "&" or "#" can no longer break the payment link.
+        const upiUrl = `upi://pay?pa=${activeUpiId}&pn=Garena&am=${finalPrice}&cu=INR&tn=${encodeURIComponent(upiNote || sanitizeUpiNoteText(product.name))}`;
         const minutes = Math.floor(qrCountdown / 60);
         const seconds = qrCountdown % 60;
         return (

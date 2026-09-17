@@ -86,6 +86,7 @@ async function createOrderFromLock(lock: PaymentLock, smsLogId: ObjectId, upiRef
                 createdAt: new Date(),
                 coinsAtTimeOfPurchase: user.coins,
                 ...(upiRef ? { utr: upiRef } : {}),
+                ...(lock.payCode ? { payCode: lock.payCode } : {}),
             };
 
             const orderResult = await db.collection<Order>('orders').insertOne(newOrder as Order, { session });
