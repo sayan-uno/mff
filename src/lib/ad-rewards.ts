@@ -16,6 +16,7 @@
 import { connectToDatabase } from '@/lib/mongodb';
 import type { User } from '@/lib/definitions';
 import { randomHex } from '@/lib/admin-auth/session';
+import { recordAdReward, recordAdStart } from '@/lib/ad-analytics/store';
 
 export const AD_REWARD_COINS = 5;
 const CLAIM_TOLERANCE_MS = 500; // small allowance for network latency
@@ -80,6 +81,9 @@ export async function startAdRewardSession(input: {
     expiresAt: new Date(now.getTime() + Math.max(input.totalDurationSec, rewardInSec) * 1000 + SESSION_GRACE_MS),
     createdAt: now,
   });
+  // Permanent record for the admin Ad Analytics page (this collection forgets
+  // sessions after ten minutes). Best effort: it never throws.
+  await recordAdStart({ token, gamingId: input.gamingId, adId: input.adId, startedAt: now });
   return { token, rewardInSec };
 }
 
@@ -108,5 +112,7 @@ export async function claimAdReward(gamingId: string, token: string): Promise<Cl
     await col.updateOne({ _id: token }, { $unset: { claimedAt: '' } });
     return { ok: false, reason: 'user_missing' };
   }
+  // The reward is paid: note it for the admin Ad Analytics page. Best effort, never throws.
+  await recordAdReward({ token, gamingId, adId: existing.adId, startedAt: existing.createdAt, rewardedAt: now, coins: AD_REWARD_COINS });
   return { ok: true, coins: AD_REWARD_COINS };
 }
