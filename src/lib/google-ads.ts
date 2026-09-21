@@ -17,8 +17,8 @@ export const GOOGLE_ADS_ID = 'AW-18464888558';
  * standard `purchase` / `sign_up` events are sent to the Google tag; once it is
  * filled in, the matching Google Ads conversion action is fired as well.
  */
-export const GOOGLE_ADS_PURCHASE_LABEL = '';
-export const GOOGLE_ADS_SIGNUP_LABEL = '';
+export const GOOGLE_ADS_PURCHASE_LABEL = 'ZCHQCN3A3_8cEO6t3-RE';
+export const GOOGLE_ADS_SIGNUP_LABEL = 'uvqrCIis8_8cEO6t3-RE';
 
 declare global {
   interface Window {
@@ -74,6 +74,7 @@ export function trackGoogleAdsPurchase(purchase: GoogleAdsPurchase): void {
 export function trackGoogleAdsSignup(): void {
   gtagSafe('sign_up', { method: 'gaming_id' });
   if (GOOGLE_ADS_SIGNUP_LABEL) {
-    gtagSafe('conversion', { send_to: `${GOOGLE_ADS_ID}/${GOOGLE_ADS_SIGNUP_LABEL}` });
+    // Same value/currency Google put in this action's event snippet.
+    gtagSafe('conversion', { send_to: `${GOOGLE_ADS_ID}/${GOOGLE_ADS_SIGNUP_LABEL}`, value: 1.0, currency: 'INR' });
   }
 }
