@@ -91,7 +91,7 @@ export interface Order {
     isCoinProduct?: boolean;
     createdAt: Date;
     coinsAtTimeOfPurchase?: number; // Record user's coin balance at the time of purchase
-    isPurchaseTracked?: boolean; // Flag to check if the purchase event has been sent to Meta Pixel
+    isPurchaseTracked?: boolean; // Flag to check if the purchase event has been sent to Meta Pixel (and Google Ads)
     payCode?: string; // Pay code of the UPI payment session this order came from (see src/lib/pay-code.ts)
 }
 

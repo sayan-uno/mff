@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { getOrdersForUser, markOrderAsTracked } from '@/app/actions';
 import type { User } from '@/lib/definitions';
+import { trackGoogleAdsPurchase } from '@/lib/google-ads';
 
 // Declare fbq for TypeScript
 declare global {
@@ -39,6 +40,15 @@ export default function MetaPixelPurchaseTracker({ user }: MetaPixelPurchaseTrac
             content_name: order.productName,
             content_ids: [order.productId],
             content_type: 'product',
+          });
+
+          // Same order, same once-only guard: also report it to Google Ads
+          // (silent no-op when the Google tag is unavailable).
+          trackGoogleAdsPurchase({
+            orderId: order._id.toString(),
+            value: order.finalPrice,
+            productId: order.productId,
+            productName: order.productName,
           });
 
           // Mark the order as tracked in the database to prevent future duplicate events.

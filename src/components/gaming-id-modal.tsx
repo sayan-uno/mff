@@ -14,6 +14,7 @@ import WelcomeAnimation from './welcome-animation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import BannedNotice from './banned-notice';
+import { trackGoogleAdsSignup } from '@/lib/google-ads';
 
 // Declare fbq for TypeScript
 declare global {
@@ -72,6 +73,8 @@ export default function GamingIdModal({ isOpen, onOpenChange }: GamingIdModalPro
         if (typeof window.fbq === 'function') {
           window.fbq('track', 'CompleteRegistration');
         }
+        // Also report the new registration to Google Ads (no-op if the tag is unavailable).
+        trackGoogleAdsSignup();
       } else {
         // For returning users, show animation without coins
         setRegistrationSuccess({});

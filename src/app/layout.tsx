@@ -26,6 +26,7 @@ import Script from 'next/script';
 import MetaPixelPurchaseTracker from '@/components/meta-pixel-purchase-tracker';
 import BrowserRedirect from '@/components/browser-redirect';
 import PresenceBeacon from '@/components/presence/presence-beacon';
+import { GOOGLE_ADS_ID } from '@/lib/google-ads';
 
 
 const FCM_TOKEN_KEY = 'fcm_token';
@@ -303,6 +304,17 @@ export default function RootLayout({
             src="https://www.facebook.com/tr?id=1888383185160715&ev=PageView&noscript=1"
           />
         </noscript>
+        {/* Google Ads tag (gtag.js). Event helpers live in src/lib/google-ads.ts. */}
+        <Script src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`} strategy="afterInteractive" />
+        <Script id="google-ads-tag" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){window.dataLayer.push(arguments);}
+            window.gtag = gtag;
+            gtag('js', new Date());
+            gtag('config', '${GOOGLE_ADS_ID}');
+          `}
+        </Script>
       </head>
       <body className={cn('font-body antialiased flex flex-col min-h-screen')}>
         <BrowserRedirect />
