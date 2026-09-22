@@ -43,3 +43,15 @@ export function buildChromeIntentUrl(url: string): string {
 export function buildInstagramExternalBrowserUrl(url: string): string {
     return `instagram://extbrowser/?url=${encodeURIComponent(withoutFragment(url))}`;
 }
+
+/**
+ * True for the Facebook / Instagram in-app browser on Android: the only place
+ * where a Chrome intent hand-off applies. Same user-agent checks as the
+ * BrowserRedirect component and the /ff page.
+ */
+export function isAndroidInAppBrowser(userAgent: string): boolean {
+    const isFacebook = /FBAN|FBAV/i.test(userAgent);
+    const isInstagram = /Instagram/i.test(userAgent);
+    const isAndroid = /android/i.test(userAgent);
+    return (isFacebook || isInstagram) && isAndroid;
+}
