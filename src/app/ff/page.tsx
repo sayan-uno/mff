@@ -1,15 +1,22 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Loader2 } from 'lucide-react';
+import { buildChromeIntentUrl, buildInstagramExternalBrowserUrl } from '@/lib/in-app-browser';
+
+// Which manual "open in browser" control the splash offers (rendered under the countdown).
+// - android:       a tap re-fires the Chrome intent (useful if the visitor dismissed the "Continue" prompt).
+// - instagram-ios: Instagram's own external-browser deep link, which iOS only honours from a tap.
+// - hint-only:     no known deep link (e.g. the Facebook iOS app); only the three-dots-menu hint is shown.
+type ManualOpen = 'android' | 'instagram-ios' | 'hint-only';
 
 export default function ForceRedirectPage() {
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [manualOpen, setManualOpen] = useState<ManualOpen | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -22,6 +29,8 @@ export default function ForceRedirectPage() {
     setIsInAppBrowser(isKnownInAppBrowser);
 
     if (isKnownInAppBrowser) {
+      setManualOpen(isAndroid ? 'android' : isInstagram ? 'instagram-ios' : 'hint-only');
+
       // Logic for in-app browsers
       const countdownInterval = setInterval(() => {
         setCountdown(prev => {
@@ -36,8 +45,10 @@ export default function ForceRedirectPage() {
 
       if (isAndroid) {
         setTimeout(() => {
-          const currentUrl = window.location.href.replace('/ff', ''); // Redirect to homepage
-          const intentUrl = `intent:${currentUrl.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+          // Redirect to homepage. The query string (?ref=..., gclid, fbclid) is kept on purpose:
+          // Chrome has its own cookie jar, so the URL is the only way those values survive the hand-off.
+          const currentUrl = window.location.href.replace('/ff', '');
+          const intentUrl = buildChromeIntentUrl(currentUrl);
           
           const redirectInterval = setInterval(() => {
             try {
@@ -52,10 +63,26 @@ export default function ForceRedirectPage() {
       }
     } else {
       // If it's not an in-app browser, redirect to home immediately.
-      router.replace('/');
+      // The query string is forwarded so a ?ref=... code is not dropped on the way.
+      router.replace('/' + window.location.search);
     }
 
   }, [router]);
+
+  // Hands the visitor to the real browser from a user tap. The target is the home page plus the
+  // current query string, so a ?ref=... code (and gclid / fbclid) travel with the visitor.
+  const handleManualOpen = () => {
+    const targetUrl = window.location.origin + '/' + window.location.search;
+    try {
+      if (manualOpen === 'android') {
+        window.location.href = buildChromeIntentUrl(targetUrl);
+      } else if (manualOpen === 'instagram-ios') {
+        window.location.href = buildInstagramExternalBrowserUrl(targetUrl);
+      }
+    } catch (e) {
+      console.error('Manual browser hand-off failed:', e);
+    }
+  };
 
   if (!isInAppBrowser) {
     // Render a loading state while the initial check and redirect happens.
@@ -121,6 +148,30 @@ export default function ForceRedirectPage() {
           <p className="mt-6 text-sm text-neutral-400 animate-pulse">
             Waiting for you to continue...
           </p>
+        )}
+
+        {/* Manual hand-off. iPhones get no automatic redirect at all, so this is their way out;
+            on Android it is a second chance if the "Continue" prompt was dismissed. */}
+        {manualOpen && (
+          <div className="mt-8 flex flex-col items-center gap-3">
+            {manualOpen === 'instagram-ios' && (
+              <p className="text-sm text-neutral-300">On iPhone, tap the button below to continue.</p>
+            )}
+            {manualOpen !== 'hint-only' && (
+              <button
+                type="button"
+                onClick={handleManualOpen}
+                className="rounded-full bg-primary px-8 py-3 text-base font-semibold text-primary-foreground shadow-lg transition-transform active:scale-95"
+              >
+                Open in browser
+              </button>
+            )}
+            <p className="max-w-xs text-xs text-neutral-400">
+              {manualOpen === 'hint-only' ? 'To continue, tap' : 'Nothing happened? Tap'} the{' '}
+              <strong className="text-white">&#8943;</strong> menu at the top and choose{' '}
+              <strong className="text-white">&quot;Open in browser&quot;</strong>.
+            </p>
+          </div>
         )}
       </div>
     </div>
