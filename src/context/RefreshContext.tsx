@@ -27,3 +27,11 @@ export function useRefresh() {
   }
   return context;
 }
+
+/**
+ * Like `useRefresh`, but returns `undefined` instead of throwing when used outside a
+ * RefreshProvider. For helpers that only *optionally* react to the refresh signal.
+ */
+export function useOptionalRefresh(): RefreshContextType | undefined {
+  return useContext(RefreshContext);
+}

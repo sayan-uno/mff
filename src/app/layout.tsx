@@ -349,8 +349,11 @@ export default function RootLayout({
             gamingId={bannedInfo?.id || ''}
             banMessage={bannedInfo?.message || ''}
           />
+          {/* Purchase tracker (Meta Pixel + Google Ads). It renders nothing; it sits inside
+              RefreshProvider so it can re-check orders the moment the purchase modal reports
+              a confirmed payment. */}
+          {user && <MetaPixelPurchaseTracker user={user} />}
         </RefreshProvider>
-        {user && <MetaPixelPurchaseTracker user={user} />}
       </body>
     </html>
   );
