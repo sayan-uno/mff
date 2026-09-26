@@ -9,7 +9,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="flex flex-col">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <Image src="/img/garena.png" alt="Garena Logo" width={24} height={24} className="h-6 w-6" />
+              <Image src="/img/garena.png" alt="Garena Logo" width={32} height={23} className="w-8 h-auto" />
               <span className="font-bold font-headline text-lg">Garena</span>
             </Link>
             <p className="text-muted-foreground text-sm max-w-sm">
