@@ -11,6 +11,12 @@ const withPWA = require('next-pwa')({
 
 const nextConfig: NextConfig = {
 
+  // Docker only. `output: 'standalone'` makes `next build` also write a small
+  // self-contained server into .next/standalone. The Dockerfile switches it on
+  // with BUILD_STANDALONE=true. Without that variable this line adds nothing,
+  // so `next dev`, `next start` and the Nixpacks build work exactly as before.
+  ...(process.env.BUILD_STANDALONE === 'true' ? { output: 'standalone' as const } : {}),
+
   experimental: {
     serverActions: {
       allowedOrigins: ['localhost:9002', '*.app.github.dev'],

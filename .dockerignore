@@ -1,0 +1,43 @@
+# Files that must never enter a Docker build.
+#
+# IMPORTANT: Dokploy writes the app's environment (all secrets) into a .env file
+# next to the Dockerfile before it builds. The .env lines below keep that file
+# out of the image. Do not remove them.
+
+# secrets and local environment files
+.env
+.env.*
+*.pem
+
+# dependencies and build output: both are recreated inside the image
+node_modules
+.next
+out
+coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# created by next-pwa during the build
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/fallback-*.js
+
+# version control, editors and logs
+.git
+.idx
+.vscode
+.github
+.claude
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+firebase-debug.log
+firestore-debug.log
+
+# the Docker files themselves
+Dockerfile
+.dockerignore
